@@ -26986,6 +26986,18 @@ const offset = {
   "9.9.20-36580-x64": {"send":"30824B8","recv":"3085C5C"},
   "3.2.18-36580-x64": {"send":"B0853E0","recv":"B088E60"},
   "3.2.18-36580-arm64": {"send":"793DAC8","recv":"7941458"},
+  "3.2.18-37012-x64": {"send":"B20F960","recv":"B2133E0"},
+  "3.2.18-37012-arm64": {"send":"7A19E00","recv":"7A1D790"},
+  "9.9.20-37012-x64": {"send":"30CC958","recv":"30D00FC"},
+  "3.2.18-37051-x64": {"send":"B20F960","recv":"B2133E0"},
+  "3.2.18-37051-arm64": {"send":"7A19E00","recv":"7A1D790"},
+  "9.9.20-37051-x64": {"send":"30CC958","recv":"30D00FC"},
+  "9.9.20-37475-x64": {"send":"30D30D8","recv":"30D687C"},
+  "3.2.18-37475-x64": {"send":"B238EC0","recv":"B23C940"},
+  "3.2.18-37475-arm64": {"send":"7A34B38","recv":"7A384C8"},
+  "9.9.20-37625-x64": {"send":"30D39D8","recv":"30D717C"},
+  "3.2.18-37625-x64": {"send":"B2397E0","recv":"B23D260"},
+  "3.2.18-37625-arm64": {"send":"7A350D8","recv":"7A38A68"},
 };
 
 class Frame {
@@ -32452,7 +32464,7 @@ class PacketClientSession {
   }
 }
 
-const napCatVersion = "4.8.90";
+const napCatVersion = "4.8.95";
 
 const typedOffset = offset;
 class NTQQPacketApi {
@@ -45882,6 +45894,14 @@ const AppidTable = {
   "9.9.20-35951": {"appid":537295977,"qua":"V1_WIN_NQ_9.9.20_35951_GW_B"},
   "3.2.18-36580": {"appid":537298509,"qua":"V1_LNX_NQ_3.2.18_36580_GW_B"},
   "9.9.20-36580": {"appid":537298473,"qua":"V1_WIN_NQ_9.9.20_36580_GW_B"},
+  "9.9.20-37012": {"appid":537304071,"qua":"V1_WIN_NQ_9.9.20_37012_GW_B"},
+  "3.2.18-37012": {"appid":537304107,"qua":"V1_LNX_NQ_3.2.18_37012_GW_B"},
+  "3.2.18-37051": {"appid":537304158,"qua":"V1_LNX_NQ_3.2.18_37051_GW_B"},
+  "9.9.20-37051": {"appid":537304122,"qua":"V1_WIN_NQ_9.9.20_37051_GW_B"},
+  "9.9.20-37475": {"appid":537304173,"qua":"V1_WIN_NQ_9.9.20_37475_GW_B"},
+  "3.2.18-37475": {"appid":537304210,"qua":"V1_LNX_NQ_3.2.18_37475_GW_B"},
+  "9.9.20-37625": {"appid":537304224,"qua":"V1_WIN_NQ_9.9.20_37625_GW_B"},
+  "3.2.18-37625": {"appid":537304261,"qua":"V1_LNX_NQ_3.2.18_37625_GW_B"},
 };
 
 class QQBasicInfoWrapper {
@@ -61290,12 +61310,12 @@ class OneBotQuickActionApi {
   }
 }
 
-const SchemaData$1n = Type.Object({
+const SchemaData$1o = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetMsg extends OneBotAction {
   actionName = ActionName.GetMsg;
-  payloadSchema = SchemaData$1n;
+  payloadSchema = SchemaData$1o;
   async _handle(payload, _adapter, config) {
     if (!payload.message_id) {
       throw Error("参数message_id不能为空");
@@ -61333,12 +61353,12 @@ class GetLoginInfo extends OneBotAction {
   }
 }
 
-const SchemaData$1m = Type.Object({
+const SchemaData$1n = Type.Object({
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetFriendList extends OneBotAction {
   actionName = ActionName.GetFriendList;
-  payloadSchema = SchemaData$1m;
+  payloadSchema = SchemaData$1n;
   async _handle(_payload) {
     const buddyMap = await this.core.apis.FriendApi.getBuddyV2SimpleInfoMap();
     const isNocache = typeof _payload.no_cache === "string" ? _payload.no_cache === "true" : !!_payload.no_cache;
@@ -61359,12 +61379,12 @@ class GetFriendList extends OneBotAction {
   }
 }
 
-const SchemaData$1l = Type.Object({
+const SchemaData$1m = Type.Object({
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetGroupList extends OneBotAction {
   actionName = ActionName.GetGroupList;
-  payloadSchema = SchemaData$1l;
+  payloadSchema = SchemaData$1m;
   async _handle(payload) {
     return OB11Construct.groups(
       await this.core.apis.GroupApi.getGroups(
@@ -61374,12 +61394,12 @@ class GetGroupList extends OneBotAction {
   }
 }
 
-const SchemaData$1k = Type.Object({
+const SchemaData$1l = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupInfo extends OneBotAction {
   actionName = ActionName.GetGroupInfo;
-  payloadSchema = SchemaData$1k;
+  payloadSchema = SchemaData$1l;
   async _handle(payload) {
     const group = (await this.core.apis.GroupApi.getGroups()).find((e) => e.groupCode == payload.group_id.toString());
     if (!group) {
@@ -61398,14 +61418,14 @@ class GetGroupInfo extends OneBotAction {
   }
 }
 
-const SchemaData$1j = Type.Object({
+const SchemaData$1k = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetGroupMemberInfo extends OneBotAction {
   actionName = ActionName.GetGroupMemberInfo;
-  payloadSchema = SchemaData$1j;
+  payloadSchema = SchemaData$1k;
   parseBoolean(value) {
     return typeof value === "string" ? value === "true" : value;
   }
@@ -61458,12 +61478,12 @@ class SendPrivateMsg extends SendMsgBase {
   }
 }
 
-const SchemaData$1i = Type.Object({
+const SchemaData$1j = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class DeleteMsg extends OneBotAction {
   actionName = ActionName.DeleteMsg;
-  payloadSchema = SchemaData$1i;
+  payloadSchema = SchemaData$1j;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(Number(payload.message_id));
     if (msg) {
@@ -61537,13 +61557,13 @@ class GoCQHTTPSendGroupForwardMsg extends GoCQHTTPSendForwardMsgBase {
   }
 }
 
-const SchemaData$1h = Type.Object({
+const SchemaData$1i = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()]),
   no_cache: Type.Union([Type.Boolean(), Type.String()], { default: false })
 });
 class GoCQHTTPGetStrangerInfo extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetStrangerInfo;
-  payloadSchema = SchemaData$1h;
+  payloadSchema = SchemaData$1i;
   async _handle(payload) {
     const user_id = payload.user_id.toString();
     const isNocache = typeof payload.no_cache === "string" ? payload.no_cache === "true" : !!payload.no_cache;
@@ -61577,13 +61597,13 @@ class GoCQHTTPGetStrangerInfo extends OneBotAction {
   }
 }
 
-const SchemaData$1g = Type.Object({
+const SchemaData$1h = Type.Object({
   times: Type.Union([Type.Number(), Type.String()], { default: 1 }),
   user_id: Type.Union([Type.Number(), Type.String()])
 });
 class SendLike extends OneBotAction {
   actionName = ActionName.SendLike;
-  payloadSchema = SchemaData$1g;
+  payloadSchema = SchemaData$1h;
   async _handle(payload) {
     const qq = payload.user_id.toString();
     const uid = await this.core.apis.UserApi.getUidByUinV2(qq) ?? "";
@@ -61595,14 +61615,14 @@ class SendLike extends OneBotAction {
   }
 }
 
-const SchemaData$1f = Type.Object({
+const SchemaData$1g = Type.Object({
   flag: Type.Union([Type.String(), Type.Number()]),
   approve: Type.Optional(Type.Union([Type.Boolean(), Type.String()])),
   reason: Type.Optional(Type.Union([Type.String({ default: " " }), Type.Null()]))
 });
 class SetGroupAddRequest extends OneBotAction {
   actionName = ActionName.SetGroupAddRequest;
-  payloadSchema = SchemaData$1f;
+  payloadSchema = SchemaData$1g;
   async _handle(payload) {
     const flag = payload.flag.toString();
     const approve = payload.approve?.toString() !== "false";
@@ -61630,26 +61650,26 @@ class SetGroupAddRequest extends OneBotAction {
   }
 }
 
-const SchemaData$1e = Type.Object({
+const SchemaData$1f = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   is_dismiss: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupLeave extends OneBotAction {
   actionName = ActionName.SetGroupLeave;
-  payloadSchema = SchemaData$1e;
+  payloadSchema = SchemaData$1f;
   async _handle(payload) {
     await this.core.apis.GroupApi.quitGroup(payload.group_id.toString());
   }
 }
 
-const SchemaData$1d = Type.Object({
+const SchemaData$1e = Type.Object({
   flag: Type.Union([Type.String(), Type.Number()]),
   approve: Type.Optional(Type.Union([Type.String(), Type.Boolean()])),
   remark: Type.Optional(Type.String())
 });
 class SetFriendAddRequest extends OneBotAction {
   actionName = ActionName.SetFriendAddRequest;
-  payloadSchema = SchemaData$1d;
+  payloadSchema = SchemaData$1e;
   async _handle(payload) {
     const approve = payload.approve?.toString() !== "false";
     const notify = (await this.core.apis.FriendApi.getBuddyReq()).buddyReqs.find((e) => e.reqTime == payload.flag.toString());
@@ -61664,13 +61684,13 @@ class SetFriendAddRequest extends OneBotAction {
   }
 }
 
-const SchemaData$1c = Type.Object({
+const SchemaData$1d = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   enable: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupWholeBan extends OneBotAction {
   actionName = ActionName.SetGroupWholeBan;
-  payloadSchema = SchemaData$1c;
+  payloadSchema = SchemaData$1d;
   async _handle(payload) {
     const enable = payload.enable?.toString() !== "false";
     let res = await this.core.apis.GroupApi.banGroup(payload.group_id.toString(), enable);
@@ -61681,13 +61701,13 @@ class SetGroupWholeBan extends OneBotAction {
   }
 }
 
-const SchemaData$1b = Type.Object({
+const SchemaData$1c = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   group_name: Type.String()
 });
 class SetGroupName extends OneBotAction {
   actionName = ActionName.SetGroupName;
-  payloadSchema = SchemaData$1b;
+  payloadSchema = SchemaData$1c;
   async _handle(payload) {
     const ret = await this.core.apis.GroupApi.setGroupName(payload.group_id.toString(), payload.group_name);
     if (ret.result !== 0) {
@@ -61697,14 +61717,14 @@ class SetGroupName extends OneBotAction {
   }
 }
 
-const SchemaData$1a = Type.Object({
+const SchemaData$1b = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   duration: Type.Union([Type.Number(), Type.String()], { default: 0 })
 });
 class SetGroupBan extends OneBotAction {
   actionName = ActionName.SetGroupBan;
-  payloadSchema = SchemaData$1a;
+  payloadSchema = SchemaData$1b;
   async _handle(payload) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error("uid error");
@@ -61719,14 +61739,14 @@ class SetGroupBan extends OneBotAction {
   }
 }
 
-const SchemaData$19 = Type.Object({
+const SchemaData$1a = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   reject_add_request: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupKick extends OneBotAction {
   actionName = ActionName.SetGroupKick;
-  payloadSchema = SchemaData$19;
+  payloadSchema = SchemaData$1a;
   async _handle(payload) {
     const rejectReq = payload.reject_add_request?.toString() == "true";
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -61736,14 +61756,14 @@ class SetGroupKick extends OneBotAction {
   }
 }
 
-const SchemaData$18 = Type.Object({
+const SchemaData$19 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   enable: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupAdmin extends OneBotAction {
   actionName = ActionName.SetGroupAdmin;
-  payloadSchema = SchemaData$18;
+  payloadSchema = SchemaData$19;
   async _handle(payload) {
     const enable = typeof payload.enable === "string" ? payload.enable === "true" : !!payload.enable;
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -61753,14 +61773,14 @@ class SetGroupAdmin extends OneBotAction {
   }
 }
 
-const SchemaData$17 = Type.Object({
+const SchemaData$18 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   card: Type.Optional(Type.String())
 });
 class SetGroupCard extends OneBotAction {
   actionName = ActionName.SetGroupCard;
-  payloadSchema = SchemaData$17;
+  payloadSchema = SchemaData$18;
   async _handle(payload) {
     const member = await this.core.apis.GroupApi.getGroupMember(payload.group_id.toString(), payload.user_id.toString());
     if (member) await this.core.apis.GroupApi.setMemberCard(payload.group_id.toString(), member.uid, payload.card || "");
@@ -61902,7 +61922,7 @@ class GetRecord extends GetFileBase {
   }
 }
 
-const SchemaData$16 = Type.Object({
+const SchemaData$17 = Type.Object({
   user_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
   group_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
   message_id: Type.Optional(Type.Union([Type.String(), Type.Number()]))
@@ -61941,11 +61961,11 @@ class MarkMsgAsRead extends OneBotAction {
   }
 }
 class MarkPrivateMsgAsRead extends MarkMsgAsRead {
-  payloadSchema = SchemaData$16;
+  payloadSchema = SchemaData$17;
   actionName = ActionName.MarkPrivateMsgAsRead;
 }
 class MarkGroupMsgAsRead extends MarkMsgAsRead {
-  payloadSchema = SchemaData$16;
+  payloadSchema = SchemaData$17;
   actionName = ActionName.MarkGroupMsgAsRead;
 }
 class GoCQHTTPMarkMsgAsRead extends MarkMsgAsRead {
@@ -61959,7 +61979,7 @@ class MarkAllMsgAsRead extends OneBotAction {
   }
 }
 
-const SchemaData$15 = Type.Object({
+const SchemaData$16 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file: Type.String(),
   name: Type.String(),
@@ -61969,7 +61989,7 @@ const SchemaData$15 = Type.Object({
 });
 class GoCQHTTPUploadGroupFile extends OneBotAction {
   actionName = ActionName.GoCQHTTP_UploadGroupFile;
-  payloadSchema = SchemaData$15;
+  payloadSchema = SchemaData$16;
   async _handle(payload) {
     let file = payload.file;
     if (fs__default.existsSync(file)) {
@@ -61994,12 +62014,12 @@ class GoCQHTTPUploadGroupFile extends OneBotAction {
   }
 }
 
-const SchemaData$14 = Type.Object({
+const SchemaData$15 = Type.Object({
   file: Type.String()
 });
 class SetAvatar extends OneBotAction {
   actionName = ActionName.SetQQAvatar;
-  payloadSchema = SchemaData$14;
+  payloadSchema = SchemaData$15;
   async _handle(payload) {
     const { path, success } = await uriToLocalFile(this.core.NapCatTempPath, payload.file);
     if (!success) {
@@ -62027,7 +62047,7 @@ class SetAvatar extends OneBotAction {
   }
 }
 
-const SchemaData$13 = Type.Object({
+const SchemaData$14 = Type.Object({
   url: Type.Optional(Type.String()),
   base64: Type.Optional(Type.String()),
   name: Type.Optional(Type.String()),
@@ -62035,7 +62055,7 @@ const SchemaData$13 = Type.Object({
 });
 class GoCQHTTPDownloadFile extends OneBotAction {
   actionName = ActionName.GoCQHTTP_DownloadFile;
-  payloadSchema = SchemaData$13;
+  payloadSchema = SchemaData$14;
   async _handle(payload) {
     const isRandomName = !payload.name;
     const name = payload.name || randomUUID();
@@ -62087,7 +62107,7 @@ class GoCQHTTPDownloadFile extends OneBotAction {
   }
 }
 
-const SchemaData$12 = Type.Object({
+const SchemaData$13 = Type.Object({
   group_id: Type.String(),
   message_seq: Type.Optional(Type.String()),
   count: Type.Number({ default: 20 }),
@@ -62095,7 +62115,7 @@ const SchemaData$12 = Type.Object({
 });
 class GoCQHTTPGetGroupMsgHistory extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupMsgHistory;
-  payloadSchema = SchemaData$12;
+  payloadSchema = SchemaData$13;
   async _handle(payload, _adapter, config) {
     const peer = { chatType: ChatType.KCHATTYPEGROUP, peerUid: payload.group_id.toString() };
     const hasMessageSeq = !payload.message_seq ? !!payload.message_seq : !(payload.message_seq?.toString() === "" || payload.message_seq?.toString() === "0");
@@ -62112,13 +62132,13 @@ class GoCQHTTPGetGroupMsgHistory extends OneBotAction {
   }
 }
 
-const SchemaData$11 = Type.Object({
+const SchemaData$12 = Type.Object({
   message_id: Type.Optional(Type.String()),
   id: Type.Optional(Type.String())
 });
 class GoCQHTTPGetForwardMsgAction extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetForwardMsg;
-  payloadSchema = SchemaData$11;
+  payloadSchema = SchemaData$12;
   createTemplateNode(message) {
     return {
       type: OB11MessageDataType.node,
@@ -62226,7 +62246,7 @@ class GoCQHTTPGetForwardMsgAction extends OneBotAction {
   }
 }
 
-const SchemaData$10 = Type.Object({
+const SchemaData$11 = Type.Object({
   user_id: Type.String(),
   message_seq: Type.Optional(Type.String()),
   count: Type.Number({ default: 20 }),
@@ -62234,7 +62254,7 @@ const SchemaData$10 = Type.Object({
 });
 class GetFriendMsgHistory extends OneBotAction {
   actionName = ActionName.GetFriendMsgHistory;
-  payloadSchema = SchemaData$10;
+  payloadSchema = SchemaData$11;
   async _handle(payload, _adapter, config) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error(`记录${payload.user_id}不存在`);
@@ -62254,12 +62274,12 @@ class GetFriendMsgHistory extends OneBotAction {
   }
 }
 
-const SchemaData$$ = Type.Object({
+const SchemaData$10 = Type.Object({
   domain: Type.String()
 });
 class GetCookies extends OneBotAction {
   actionName = ActionName.GetCookies;
-  payloadSchema = SchemaData$$;
+  payloadSchema = SchemaData$10;
   async _handle(payload) {
     const cookiesObject = await this.core.apis.UserApi.getCookies(payload.domain);
     const cookies = Object.entries(cookiesObject).map(([key, value]) => `${key}=${value}`).join("; ");
@@ -62268,14 +62288,14 @@ class GetCookies extends OneBotAction {
   }
 }
 
-const SchemaData$_ = Type.Object({
+const SchemaData$$ = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()]),
   emoji_id: Type.Union([Type.Number(), Type.String()]),
   set: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetMsgEmojiLike extends OneBotAction {
   actionName = ActionName.SetMsgEmojiLike;
-  payloadSchema = SchemaData$_;
+  payloadSchema = SchemaData$$;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msg) {
@@ -62305,14 +62325,14 @@ class GetRobotUinRange extends OneBotAction {
   }
 }
 
-const SchemaData$Z = Type.Object({
+const SchemaData$_ = Type.Object({
   status: Type.Union([Type.Number(), Type.String()]),
   ext_status: Type.Union([Type.Number(), Type.String()]),
   battery_status: Type.Union([Type.Number(), Type.String()])
 });
 class SetOnlineStatus extends OneBotAction {
   actionName = ActionName.SetOnlineStatus;
-  payloadSchema = SchemaData$Z;
+  payloadSchema = SchemaData$_;
   async _handle(payload) {
     const ret = await this.core.apis.UserApi.setSelfOnlineStatus(
       +payload.status,
@@ -62326,12 +62346,12 @@ class SetOnlineStatus extends OneBotAction {
   }
 }
 
-const SchemaData$Y = Type.Object({
+const SchemaData$Z = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupNotice extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupNotice;
-  payloadSchema = SchemaData$Y;
+  payloadSchema = SchemaData$Z;
   async _handle(payload) {
     const group = payload.group_id.toString();
     const ret = await this.core.apis.WebApi.getGroupNotice(group);
@@ -62363,12 +62383,12 @@ class GetGroupNotice extends OneBotAction {
   }
 }
 
-const SchemaData$X = Type.Object({
+const SchemaData$Y = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupEssence extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetEssenceMsg;
-  payloadSchema = SchemaData$X;
+  payloadSchema = SchemaData$Y;
   async msgSeqToMsgId(peer, msgSeq, msgRandom) {
     const replyMsgList = (await this.core.apis.MsgApi.getMsgsBySeqAndCount(peer, msgSeq, 1, true, true)).msgList.find((msg) => msg.msgSeq === msgSeq && msg.msgRandom === msgRandom);
     if (!replyMsgList) {
@@ -62446,7 +62466,7 @@ class GetGroupEssence extends OneBotAction {
   }
 }
 
-const SchemaData$W = Type.Object({
+const SchemaData$X = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()]),
   group_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   user_id: Type.Optional(Type.Union([Type.Number(), Type.String()]))
@@ -62480,11 +62500,11 @@ class ForwardSingleMsg extends OneBotAction {
   }
 }
 class ForwardFriendSingleMsg extends ForwardSingleMsg {
-  payloadSchema = SchemaData$W;
+  payloadSchema = SchemaData$X;
   actionName = ActionName.ForwardFriendSingleMsg;
 }
 class ForwardGroupSingleMsg extends ForwardSingleMsg {
-  payloadSchema = SchemaData$W;
+  payloadSchema = SchemaData$X;
   actionName = ActionName.ForwardGroupSingleMsg;
 }
 
@@ -62498,7 +62518,7 @@ class GetFriendWithCategory extends OneBotAction {
   }
 }
 
-const SchemaData$V = Type.Object({
+const SchemaData$W = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   content: Type.String(),
   image: Type.Optional(Type.String()),
@@ -62510,7 +62530,7 @@ const SchemaData$V = Type.Object({
 });
 class SendGroupNotice extends OneBotAction {
   actionName = ActionName.GoCQHTTP_SendGroupNotice;
-  payloadSchema = SchemaData$V;
+  payloadSchema = SchemaData$W;
   async _handle(payload) {
     let UploadImage = void 0;
     if (payload.image) {
@@ -62552,13 +62572,13 @@ class SendGroupNotice extends OneBotAction {
   }
 }
 
-const SchemaData$U = Type.Object({
+const SchemaData$V = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   type: Type.Optional(Type.Enum(WebHonorType))
 });
 class GetGroupHonorInfo extends OneBotAction {
   actionName = ActionName.GetGroupHonorInfo;
-  payloadSchema = SchemaData$U;
+  payloadSchema = SchemaData$V;
   async _handle(payload) {
     if (!payload.type) {
       payload.type = WebHonorType.ALL;
@@ -62615,11 +62635,11 @@ class GetOnlineClient extends OneBotAction {
   }
 }
 
-const SchemaData$T = Type.Object({
+const SchemaData$U = Type.Object({
   image: Type.String()
 });
 class OCRImageBase extends OneBotAction {
-  payloadSchema = SchemaData$T;
+  payloadSchema = SchemaData$U;
   async _handle(payload) {
     const { path, success } = await uriToLocalFile(this.core.NapCatTempPath, payload.image);
     if (!success) {
@@ -62648,12 +62668,12 @@ class IOCRImage extends OCRImageBase {
   actionName = ActionName.IOCRImage;
 }
 
-const SchemaData$S = Type.Object({
+const SchemaData$T = Type.Object({
   words: Type.Array(Type.String())
 });
 class TranslateEnWordToZn extends OneBotAction {
   actionName = ActionName.TranslateEnWordToZn;
-  payloadSchema = SchemaData$S;
+  payloadSchema = SchemaData$T;
   async _handle(payload) {
     const ret = await this.core.apis.SystemApi.translateEnWordToZn(payload.words);
     if (ret.result !== 0) {
@@ -62663,7 +62683,7 @@ class TranslateEnWordToZn extends OneBotAction {
   }
 }
 
-const SchemaData$R = Type.Object({
+const SchemaData$S = Type.Object({
   nickname: Type.String(),
   personal_note: Type.Optional(Type.String()),
   sex: Type.Optional(Type.Union([Type.Number(), Type.String()]))
@@ -62671,7 +62691,7 @@ const SchemaData$R = Type.Object({
 });
 class SetQQProfile extends OneBotAction {
   actionName = ActionName.SetQQProfile;
-  payloadSchema = SchemaData$R;
+  payloadSchema = SchemaData$S;
   async _handle(payload) {
     const self = this.core.selfInfo;
     const OldProfile = await this.core.apis.UserApi.getUserDetailInfo(self.uid);
@@ -62689,14 +62709,14 @@ class SetQQProfile extends OneBotAction {
   }
 }
 
-const SchemaData$Q = Type.Object({
+const SchemaData$R = Type.Object({
   user_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   group_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   phoneNumber: Type.String({ default: "" })
 });
 class SharePeer extends OneBotAction {
   actionName = ActionName.SharePeer;
-  payloadSchema = SchemaData$Q;
+  payloadSchema = SchemaData$R;
   async _handle(payload) {
     if (payload.group_id) {
       return await this.core.apis.GroupApi.getGroupRecommendContactArkJson(payload.group_id.toString());
@@ -62717,13 +62737,13 @@ class ShareGroupEx extends OneBotAction {
   }
 }
 
-const SchemaData$P = Type.Object({
+const SchemaData$Q = Type.Object({
   rawData: Type.String(),
   brief: Type.String()
 });
 class CreateCollection extends OneBotAction {
   actionName = ActionName.CreateCollection;
-  payloadSchema = SchemaData$P;
+  payloadSchema = SchemaData$Q;
   async _handle(payload) {
     return await this.core.apis.CollectionApi.createCollection(
       this.core.selfInfo.uin,
@@ -62735,23 +62755,23 @@ class CreateCollection extends OneBotAction {
   }
 }
 
-const SchemaData$O = Type.Object({
+const SchemaData$P = Type.Object({
   longNick: Type.String()
 });
 class SetLongNick extends OneBotAction {
   actionName = ActionName.SetLongNick;
-  payloadSchema = SchemaData$O;
+  payloadSchema = SchemaData$P;
   async _handle(payload) {
     return await this.core.apis.UserApi.setLongNick(payload.longNick);
   }
 }
 
-const SchemaData$N = Type.Object({
+const SchemaData$O = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class DelEssenceMsg extends OneBotAction {
   actionName = ActionName.DelEssenceMsg;
-  payloadSchema = SchemaData$N;
+  payloadSchema = SchemaData$O;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msg) {
@@ -62767,12 +62787,12 @@ class DelEssenceMsg extends OneBotAction {
   }
 }
 
-const SchemaData$M = Type.Object({
+const SchemaData$N = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class SetEssenceMsg extends OneBotAction {
   actionName = ActionName.SetEssenceMsg;
-  payloadSchema = SchemaData$M;
+  payloadSchema = SchemaData$N;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msg) {
@@ -62785,12 +62805,12 @@ class SetEssenceMsg extends OneBotAction {
   }
 }
 
-const SchemaData$L = Type.Object({
+const SchemaData$M = Type.Object({
   count: Type.Union([Type.Number(), Type.String()], { default: 10 })
 });
 class GetRecentContact extends OneBotAction {
   actionName = ActionName.GetRecentContact;
-  payloadSchema = SchemaData$L;
+  payloadSchema = SchemaData$M;
   async _handle(payload, _adapter, config) {
     const ret = await this.core.apis.UserApi.getRecentContactListSnapShot(+payload.count);
     return await Promise.all(ret.info.changedList.map(async (t) => {
@@ -62823,14 +62843,14 @@ class GetRecentContact extends OneBotAction {
   }
 }
 
-const SchemaData$K = Type.Object({
+const SchemaData$L = Type.Object({
   user_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   start: Type.Union([Type.Number(), Type.String()], { default: 0 }),
   count: Type.Union([Type.Number(), Type.String()], { default: 10 })
 });
 class GetProfileLike extends OneBotAction {
   actionName = ActionName.GetProfileLike;
-  payloadSchema = SchemaData$K;
+  payloadSchema = SchemaData$L;
   async _handle(payload) {
     const isSelf = this.core.selfInfo.uin === payload.user_id || !payload.user_id;
     const userUid = isSelf || !payload.user_id ? this.core.selfInfo.uid : await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -62850,13 +62870,13 @@ class GetProfileLike extends OneBotAction {
   }
 }
 
-const SchemaData$J = Type.Object({
+const SchemaData$K = Type.Object({
   file: Type.String(),
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class SetGroupPortrait extends OneBotAction {
   actionName = ActionName.SetGroupPortrait;
-  payloadSchema = SchemaData$J;
+  payloadSchema = SchemaData$K;
   async _handle(payload) {
     const { path, success } = await uriToLocalFile(this.core.NapCatTempPath, payload.file);
     if (!success) {
@@ -62884,26 +62904,26 @@ class SetGroupPortrait extends OneBotAction {
   }
 }
 
-const SchemaData$I = Type.Object({
+const SchemaData$J = Type.Object({
   count: Type.Union([Type.Number(), Type.String()], { default: 48 })
 });
 class FetchCustomFace extends OneBotAction {
   actionName = ActionName.FetchCustomFace;
-  payloadSchema = SchemaData$I;
+  payloadSchema = SchemaData$J;
   async _handle(payload) {
     const ret = await this.core.apis.MsgApi.fetchFavEmojiList(+payload.count);
     return ret.emojiInfoList.map((e) => e.url);
   }
 }
 
-const SchemaData$H = Type.Object({
+const SchemaData$I = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()]),
   file: Type.String(),
   name: Type.String()
 });
 class GoCQHTTPUploadPrivateFile extends OneBotAction {
   actionName = ActionName.GOCQHTTP_UploadPrivateFile;
-  payloadSchema = SchemaData$H;
+  payloadSchema = SchemaData$I;
   async getPeer(payload) {
     if (payload.user_id) {
       const peerUid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -62937,7 +62957,7 @@ class GoCQHTTPUploadPrivateFile extends OneBotAction {
   }
 }
 
-const SchemaData$G = Type.Object({
+const SchemaData$H = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()]),
   emojiId: Type.Union([Type.Number(), Type.String()]),
   emojiType: Type.Union([Type.Number(), Type.String()]),
@@ -62945,7 +62965,7 @@ const SchemaData$G = Type.Object({
 });
 class FetchEmojiLike extends OneBotAction {
   actionName = ActionName.FetchEmojiLike;
-  payloadSchema = SchemaData$G;
+  payloadSchema = SchemaData$H;
   async _handle(payload) {
     const msgIdPeer = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msgIdPeer) throw new Error("消息不存在");
@@ -62961,13 +62981,13 @@ class FetchEmojiLike extends OneBotAction {
   }
 }
 
-const SchemaData$F = Type.Object({
+const SchemaData$G = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()]),
   event_type: Type.Number()
 });
 class SetInputStatus extends OneBotAction {
   actionName = ActionName.SetInputStatus;
-  payloadSchema = SchemaData$F;
+  payloadSchema = SchemaData$G;
   async _handle(payload) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error("uid is empty");
@@ -62992,13 +63012,13 @@ class GetCSRF extends OneBotAction {
   }
 }
 
-const SchemaData$E = Type.Object({
+const SchemaData$F = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   notice_id: Type.String()
 });
 class DelGroupNotice extends OneBotAction {
   actionName = ActionName.DelGroupNotice;
-  payloadSchema = SchemaData$E;
+  payloadSchema = SchemaData$F;
   async _handle(payload) {
     const group = payload.group_id.toString();
     const noticeId = payload.notice_id;
@@ -63006,24 +63026,24 @@ class DelGroupNotice extends OneBotAction {
   }
 }
 
-const SchemaData$D = Type.Object({
+const SchemaData$E = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupInfoEx extends OneBotAction {
   actionName = ActionName.GetGroupInfoEx;
-  payloadSchema = SchemaData$D;
+  payloadSchema = SchemaData$E;
   async _handle(payload) {
     return (await this.core.apis.GroupApi.getGroupExtFE0Info([payload.group_id.toString()])).result.groupExtInfos.get(payload.group_id.toString());
   }
 }
 
-const SchemaData$C = Type.Object({
+const SchemaData$D = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_id: Type.String()
 });
 class DeleteGroupFile extends OneBotAction {
   actionName = ActionName.GOCQHTTP_DeleteGroupFile;
-  payloadSchema = SchemaData$C;
+  payloadSchema = SchemaData$D;
   async _handle(payload) {
     const data = FileNapCatOneBotUUID.decodeModelId(payload.file_id);
     if (!data || !data.fileId) throw new Error("Invalid file_id");
@@ -63031,7 +63051,7 @@ class DeleteGroupFile extends OneBotAction {
   }
 }
 
-const SchemaData$B = Type.Object({
+const SchemaData$C = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   // 兼容gocq 与name二选一
   folder_name: Type.Optional(Type.String()),
@@ -63040,21 +63060,21 @@ const SchemaData$B = Type.Object({
 });
 class CreateGroupFileFolder extends OneBotAction {
   actionName = ActionName.GoCQHTTP_CreateGroupFileFolder;
-  payloadSchema = SchemaData$B;
+  payloadSchema = SchemaData$C;
   async _handle(payload) {
     const folderName = payload.folder_name || payload.name;
     return (await this.core.apis.GroupApi.creatGroupFileFolder(payload.group_id.toString(), folderName)).resultWithGroupItem;
   }
 }
 
-const SchemaData$A = Type.Object({
+const SchemaData$B = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   folder_id: Type.Optional(Type.String()),
   folder: Type.Optional(Type.String())
 });
 class DeleteGroupFileFolder extends OneBotAction {
   actionName = ActionName.GoCQHTTP_DeleteGroupFileFolder;
-  payloadSchema = SchemaData$A;
+  payloadSchema = SchemaData$B;
   async _handle(payload) {
     return (await this.core.apis.GroupApi.delGroupFileFolder(
       payload.group_id.toString(),
@@ -63063,12 +63083,12 @@ class DeleteGroupFileFolder extends OneBotAction {
   }
 }
 
-const SchemaData$z = Type.Object({
+const SchemaData$A = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupFileSystemInfo extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupFileSystemInfo;
-  payloadSchema = SchemaData$z;
+  payloadSchema = SchemaData$A;
   async _handle(payload) {
     const groupFileCount = (await this.core.apis.GroupApi.getGroupFileCount([payload.group_id.toString()])).groupFileCounts[0];
     if (!groupFileCount) {
@@ -63083,13 +63103,13 @@ class GetGroupFileSystemInfo extends OneBotAction {
   }
 }
 
-const SchemaData$y = Type.Object({
+const SchemaData$z = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_count: Type.Union([Type.Number(), Type.String()], { default: 50 })
 });
 class GetGroupRootFiles extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupRootFiles;
-  payloadSchema = SchemaData$y;
+  payloadSchema = SchemaData$z;
   async _handle(payload) {
     const ret = await this.core.apis.MsgApi.getGroupFileList(payload.group_id.toString(), {
       sortType: 1,
@@ -63105,7 +63125,7 @@ class GetGroupRootFiles extends OneBotAction {
   }
 }
 
-const SchemaData$x = Type.Object({
+const SchemaData$y = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   folder_id: Type.Optional(Type.String()),
   folder: Type.Optional(Type.String()),
@@ -63113,7 +63133,7 @@ const SchemaData$x = Type.Object({
 });
 class GetGroupFilesByFolder extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupFilesByFolder;
-  payloadSchema = SchemaData$x;
+  payloadSchema = SchemaData$y;
   async _handle(payload) {
     const ret = await this.core.apis.MsgApi.getGroupFileList(payload.group_id.toString(), {
       sortType: 1,
@@ -63130,10 +63150,14 @@ class GetGroupFilesByFolder extends OneBotAction {
   }
 }
 
+const SchemaData$x = Type.Object({
+  count: Type.Union([Type.Number(), Type.String()], { default: 50 })
+});
 class GetGroupSystemMsg extends OneBotAction {
   actionName = ActionName.GetGroupSystemMsg;
-  async _handle() {
-    const SingleScreenNotifies = await this.core.apis.GroupApi.getSingleScreenNotifies(false, 50);
+  payloadSchema = SchemaData$x;
+  async _handle(params) {
+    const SingleScreenNotifies = await this.core.apis.GroupApi.getSingleScreenNotifies(false, +params.count);
     const retData = { invited_requests: [], InvitedRequest: [], join_requests: [] };
     const notifyPromises = SingleScreenNotifies.map(async (SSNotify) => {
       const invitorUin = SSNotify.user1?.uid ? +await this.core.apis.UserApi.getUinByUidV2(SSNotify.user1.uid) : 0;
@@ -64433,9 +64457,9 @@ function createActionMap(obContext, core) {
 
 const name = "napcat";
 const type = "module";
-const version = "4.8.90";
+const version = "4.8.95";
 const scripts = {"build:universal":"npm run build:webui && vite build --mode universal || exit 1","build:framework":"npm run build:webui && vite build --mode framework || exit 1","build:shell":"npm run build:webui && vite build --mode shell || exit 1","build:webui":"cd napcat.webui && npm run build","dev:universal":"vite build --mode universal","dev:framework":"vite build --mode framework","dev:shell":"vite build --mode shell","dev:webui":"cd napcat.webui && npm run dev","lint":"eslint --fix src/**/*.{js,ts,vue}","depend":"cd dist && npm install --omit=dev","dev:depend":"npm i && cd napcat.webui && npm i"};
-const devDependencies = {"@babel/preset-typescript":"^7.24.7","@eslint/compat":"^1.2.2","@eslint/eslintrc":"^3.1.0","@eslint/js":"^9.14.0","@homebridge/node-pty-prebuilt-multiarch":"^0.12.0-beta.5","@log4js-node/log4js-api":"^1.0.2","@napneko/nap-proto-core":"^0.0.4","@rollup/plugin-node-resolve":"^16.0.0","@rollup/plugin-typescript":"^12.1.2","@sinclair/typebox":"^0.34.9","@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/multer":"^1.4.12","@types/node":"^22.0.1","@types/on-finished":"^2.3.4","@types/qrcode-terminal":"^0.12.2","@types/react-color":"^3.0.13","@types/type-is":"^1.6.7","@types/ws":"^8.5.12","@typescript-eslint/eslint-plugin":"^8.3.0","@typescript-eslint/parser":"^8.3.0","ajv":"^8.13.0","async-mutex":"^0.5.0","commander":"^13.0.0","cors":"^2.8.5","esbuild":"0.25.5","eslint":"^9.14.0","eslint-import-resolver-typescript":"^4.0.0","eslint-plugin-import":"^2.29.1","express-rate-limit":"^7.5.0","fast-xml-parser":"^4.3.6","file-type":"^21.0.0","globals":"^16.0.0","json5":"^2.2.3","multer":"^2.0.1","typescript":"^5.3.3","typescript-eslint":"^8.13.0","vite":"^6.0.1","vite-plugin-cp":"^6.0.0","vite-tsconfig-paths":"^5.1.0","napcat.protobuf":"^1.1.4","winston":"^3.17.0","compressing":"^1.10.1"};
+const devDependencies = {"@babel/preset-typescript":"^7.24.7","@eslint/compat":"^1.3.1","@eslint/eslintrc":"^3.1.0","@eslint/js":"^9.31.0","@homebridge/node-pty-prebuilt-multiarch":"^0.12.0-beta.5","@log4js-node/log4js-api":"^1.0.2","@napneko/nap-proto-core":"^0.0.4","@rollup/plugin-node-resolve":"^16.0.0","@rollup/plugin-typescript":"^12.1.4","@sinclair/typebox":"^0.34.9","@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/multer":"^1.4.12","@types/node":"^22.0.1","@types/on-finished":"^2.3.4","@types/qrcode-terminal":"^0.12.2","@types/react-color":"^3.0.13","@types/type-is":"^1.6.7","@types/ws":"^8.5.12","@typescript-eslint/eslint-plugin":"^8.3.0","@typescript-eslint/parser":"^8.37.0","ajv":"^8.13.0","async-mutex":"^0.5.0","commander":"^13.0.0","cors":"^2.8.5","esbuild":"0.25.5","eslint":"^9.14.0","eslint-import-resolver-typescript":"^4.4.4","eslint-plugin-import":"^2.32.0","express-rate-limit":"^7.5.0","fast-xml-parser":"^4.3.6","file-type":"^21.0.0","globals":"^16.0.0","json5":"^2.2.3","multer":"^2.0.1","typescript":"^5.3.3","typescript-eslint":"^8.35.1","vite":"^6.0.1","vite-plugin-cp":"^6.0.0","vite-tsconfig-paths":"^5.1.0","napcat.protobuf":"^1.1.4","winston":"^3.17.0","compressing":"^1.10.1"};
 const dependencies = {"express":"^5.0.0","silk-wasm":"^3.6.1","ws":"^8.18.0"};
 const packageJson = {
   name,
@@ -89771,10 +89795,14 @@ class NodeIO3MiscListener {
 
 const downloadOri = "https://github.com/NapNeko/ffmpeg-build/releases/download/v1.0.0/ffmpeg-7.1.1-win64.zip";
 const urls = [
-  "https://github.moeyy.xyz/" + downloadOri,
-  "https://ghp.ci/" + downloadOri,
-  "https://gh.api.99988866.xyz/" + downloadOri,
-  "https://gh.api.99988866.xyz/" + downloadOri,
+  "https://j.1win.ggff.net/" + downloadOri,
+  "https://git.yylx.win/" + downloadOri,
+  "https://ghfile.geekertao.top/" + downloadOri,
+  "https://gh-proxy.net/" + downloadOri,
+  "https://ghm.078465.xyz/" + downloadOri,
+  "https://gitproxy.127731.xyz/" + downloadOri,
+  "https://jiashu.1win.eu.org/" + downloadOri,
+  "https://github.tbedu.top/" + downloadOri,
   downloadOri
 ];
 async function testUrl(url) {
