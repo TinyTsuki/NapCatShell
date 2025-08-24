@@ -63,7 +63,11 @@ function getAugmentedNamespace(n) {
   var f = n.default;
 	if (typeof f == "function") {
 		var a = function a () {
-			if (this instanceof a) {
+			var isInstance = false;
+      try {
+        isInstance = this instanceof a;
+      } catch {}
+			if (isInstance) {
         return Reflect.construct(f, arguments, this.constructor);
 			}
 			return f.apply(this, arguments);
@@ -24590,7 +24594,7 @@ class NTQQFileApi {
     }
   }
   async getFileUrl(chatType, peer, fileUUID, file10MMd5) {
-    if (this.core.apis.PacketApi.available) {
+    if (this.core.apis.PacketApi.packetStatus) {
       try {
         if (chatType === ChatType.KCHATTYPEGROUP && fileUUID) {
           return this.core.apis.PacketApi.pkt.operation.GetGroupFileUrl(+peer, fileUUID);
@@ -24604,7 +24608,7 @@ class NTQQFileApi {
     throw new Error("fileUUID or file10MMd5 is undefined");
   }
   async getPttUrl(peer, fileUUID) {
-    if (this.core.apis.PacketApi.available && fileUUID) {
+    if (this.core.apis.PacketApi.packetStatus && fileUUID) {
       let appid = new NapProtoMsg(FileId).decode(Buffer.from(fileUUID.replaceAll("-", "+").replaceAll("_", "/"), "base64")).appid;
       try {
         if (appid && appid === 1403) {
@@ -24631,7 +24635,7 @@ class NTQQFileApi {
     throw new Error("packet cant get ptt url");
   }
   async getVideoUrlPacket(peer, fileUUID) {
-    if (this.core.apis.PacketApi.available && fileUUID) {
+    if (this.core.apis.PacketApi.packetStatus && fileUUID) {
       let appid = new NapProtoMsg(FileId).decode(Buffer.from(fileUUID.replaceAll("-", "+").replaceAll("_", "/"), "base64")).appid;
       try {
         if (appid && appid === 1415) {
@@ -25000,7 +25004,7 @@ class NTQQFileApi {
       online_rkey: false
     };
     try {
-      if (this.core.apis.PacketApi.available) {
+      if (this.core.apis.PacketApi.packetStatus) {
         const rkey_expired_private = !this.packetRkey || this.packetRkey[0] && this.packetRkey[0].time + Number(this.packetRkey[0].ttl) < Date.now() / 1e3;
         const rkey_expired_group = !this.packetRkey || this.packetRkey[0] && this.packetRkey[0].time + Number(this.packetRkey[0].ttl) < Date.now() / 1e3;
         if (rkey_expired_private || rkey_expired_group) {
@@ -26143,7 +26147,6 @@ class NTQQMsgApi {
     });
   }
   async queryFirstMsgBySender(peer, SendersUid) {
-    console.log(peer, SendersUid);
     return await this.context.session.getMsgService().queryMsgsWithFilterEx("0", "0", "0", {
       chatInfo: peer,
       filterMsgType: [],
@@ -26998,6 +27001,8 @@ const offset = {
   "9.9.20-37625-x64": {"send":"30D39D8","recv":"30D717C"},
   "3.2.18-37625-x64": {"send":"B2397E0","recv":"B23D260"},
   "3.2.18-37625-arm64": {"send":"7A350D8","recv":"7A38A68"},
+  "9.9.21-38503-x64": {"send":"3105F38","recv":"31096DC"},
+  "3.2.19-38503-x64": {"send":"B2C1A60","recv":"B2C54E0"},
 };
 
 class Frame {
@@ -32464,7 +32469,7 @@ class PacketClientSession {
   }
 }
 
-const napCatVersion = "4.8.95";
+const napCatVersion = "4.8.98";
 
 const typedOffset = offset;
 class NTQQPacketApi {
@@ -32474,16 +32479,20 @@ class NTQQPacketApi {
   qqVersion;
   pkt;
   errStack = [];
+  packetStatus = false;
   constructor(context, core) {
     this.context = context;
     this.core = core;
     this.logger = core.context.logger;
   }
   async initApi() {
-    await this.InitSendPacket(this.context.basicInfoWrapper.getFullQQVesion()).then().catch((err) => {
+    this.packetStatus = await this.InitSendPacket(this.context.basicInfoWrapper.getFullQQVersion()).then((result) => {
+      return result;
+    }).catch((err) => {
       this.logger.logError(err);
       this.errStack.push(err);
-    });
+      return false;
+    }) && this.pkt?.available;
   }
   get available() {
     return this.pkt?.available ?? false;
@@ -32509,6 +32518,12 @@ class NTQQPacketApi {
     }
     this.pkt = new PacketClientSession(this.core);
     await this.pkt.init(process.pid, table.recv, table.send);
+    try {
+      await this.pkt.operation.FetchRkey();
+    } catch (error) {
+      this.logger.logError("测试Packet状态异常", error);
+      return false;
+    }
     return true;
   }
 }
@@ -45213,7 +45228,6 @@ class NodeIKernelBuddyListener {
   onCheckBuddySettingResult(_arg) {
   }
   onDelBatchBuddyInfos(_arg) {
-    console.log("onDelBatchBuddyInfos not implemented", ...arguments);
   }
   onDoubtBuddyReqChange(_arg) {
   }
@@ -45902,6 +45916,8 @@ const AppidTable = {
   "3.2.18-37475": {"appid":537304210,"qua":"V1_LNX_NQ_3.2.18_37475_GW_B"},
   "9.9.20-37625": {"appid":537304224,"qua":"V1_WIN_NQ_9.9.20_37625_GW_B"},
   "3.2.18-37625": {"appid":537304261,"qua":"V1_LNX_NQ_3.2.18_37625_GW_B"},
+  "9.9.21-38503": {"appid":537307604,"qua":"V1_WIN_NQ_9.9.21_38503_GW_B"},
+  "3.2.19-38503": {"appid":537307640,"qua":"V1_LNX_NQ_3.2.19_38503_GW_B"},
 };
 
 class QQBasicInfoWrapper {
@@ -45930,7 +45946,7 @@ class QQBasicInfoWrapper {
   getQQBuildStr() {
     return this.isQuickUpdate ? this.QQVersionConfig?.buildId : this.QQPackageInfo?.buildVersion;
   }
-  getFullQQVesion() {
+  getFullQQVersion() {
     const version = this.isQuickUpdate ? this.QQVersionConfig?.curVersion : this.QQPackageInfo?.version;
     if (!version) throw new Error("QQ版本获取失败");
     return version;
@@ -45943,9 +45959,9 @@ class QQBasicInfoWrapper {
   //此方法不要直接使用
   getQUAFallback() {
     const platformMapping = {
-      win32: `V1_WIN_${this.getFullQQVesion()}_${this.getQQBuildStr()}_GW_B`,
-      darwin: `V1_MAC_${this.getFullQQVesion()}_${this.getQQBuildStr()}_GW_B`,
-      linux: `V1_LNX_${this.getFullQQVesion()}_${this.getQQBuildStr()}_GW_B`
+      win32: `V1_WIN_${this.getFullQQVersion()}_${this.getQQBuildStr()}_GW_B`,
+      darwin: `V1_MAC_${this.getFullQQVersion()}_${this.getQQBuildStr()}_GW_B`,
+      linux: `V1_LNX_${this.getFullQQVersion()}_${this.getQQBuildStr()}_GW_B`
     };
     return platformMapping[systemPlatform] ?? platformMapping.win32;
   }
@@ -45959,7 +45975,7 @@ class QQBasicInfoWrapper {
   }
   getAppidV2() {
     const appidTbale = AppidTable;
-    const fullVersion = this.getFullQQVesion();
+    const fullVersion = this.getFullQQVersion();
     if (fullVersion) {
       const data = appidTbale[fullVersion];
       if (data) {
@@ -59120,7 +59136,7 @@ class OneBotGroupApi {
         this.core,
         parseInt(msg.peerUid),
         MessageUnique.getShortIdByMsgId(msgData.msgList[0].msgId),
-        parseInt(msgData.msgList[0].senderUin),
+        parseInt(msgData.msgList[0].senderUin ?? await this.core.apis.UserApi.getUinByUidV2(msgData.msgList[0].senderUid)),
         parseInt(realMsg?.add_digest_uin ?? "0")
       );
     }
@@ -59837,7 +59853,7 @@ class OneBotMsgApi {
       };
       FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid, element.fileUuid);
       FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid, element.fileName);
-      if (this.core.apis.PacketApi.available) {
+      if (this.core.apis.PacketApi.packetStatus) {
         let url;
         try {
           url = await this.core.apis.FileApi.getFileUrl(msg.chatType, msg.peerUid, element.fileUuid, element.file10MMd5);
@@ -60040,7 +60056,7 @@ class OneBotMsgApi {
         }
       }
       if (!videoDownUrl) {
-        if (this.core.apis.PacketApi.available) {
+        if (this.core.apis.PacketApi.packetStatus) {
           try {
             videoDownUrl = await this.core.apis.FileApi.getVideoUrlPacket(msg.peerUid, element.fileUuid);
           } catch (e) {
@@ -60069,7 +60085,7 @@ class OneBotMsgApi {
       };
       const fileCode = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "", element.fileName);
       let pttUrl = "";
-      if (this.core.apis.PacketApi.available) {
+      if (this.core.apis.PacketApi.packetStatus) {
         try {
           pttUrl = await this.core.apis.FileApi.getPttUrl(msg.peerUid, element.fileUuid);
         } catch (e) {
@@ -60999,7 +61015,7 @@ class SendMsgBase extends OneBotAction {
       typeof payload.auto_escape === "string" ? payload.auto_escape === "true" : !!payload.auto_escape
     );
     if (getSpecialMsgNum(payload, OB11MessageDataType.node)) {
-      const packetMode = this.core.apis.PacketApi.available;
+      const packetMode = this.core.apis.PacketApi.packetStatus;
       let returnMsgAndResId;
       try {
         returnMsgAndResId = packetMode ? await this.handleForwardedNodesPacket(peer, messages, payload.source, payload.news, payload.summary, payload.prompt) : await this.handleForwardedNodes(peer, messages);
@@ -61618,7 +61634,8 @@ class SendLike extends OneBotAction {
 const SchemaData$1g = Type.Object({
   flag: Type.Union([Type.String(), Type.Number()]),
   approve: Type.Optional(Type.Union([Type.Boolean(), Type.String()])),
-  reason: Type.Optional(Type.Union([Type.String({ default: " " }), Type.Null()]))
+  reason: Type.Optional(Type.Union([Type.String({ default: " " }), Type.Null()])),
+  count: Type.Optional(Type.Number({ default: 100 }))
 });
 class SetGroupAddRequest extends OneBotAction {
   actionName = ActionName.SetGroupAddRequest;
@@ -61627,8 +61644,12 @@ class SetGroupAddRequest extends OneBotAction {
     const flag = payload.flag.toString();
     const approve = payload.approve?.toString() !== "false";
     const reason = payload.reason ?? " ";
+    const count = payload.count;
     const invite_notify = this.obContext.apis.MsgApi.notifyGroupInvite.get(flag);
-    const { doubt, notify } = invite_notify ? { doubt: false, notify: invite_notify } : await this.findNotify(flag);
+    const { doubt, notify } = invite_notify ? {
+      doubt: false,
+      notify: invite_notify
+    } : await this.findNotify(flag, count);
     if (!notify) {
       throw new Error("No such request");
     }
@@ -61640,10 +61661,10 @@ class SetGroupAddRequest extends OneBotAction {
     );
     return null;
   }
-  async findNotify(flag) {
-    let notify = (await this.core.apis.GroupApi.getSingleScreenNotifies(false, 100)).find((e) => e.seq == flag);
+  async findNotify(flag, count = 100) {
+    let notify = (await this.core.apis.GroupApi.getSingleScreenNotifies(false, count)).find((e) => e.seq == flag);
     if (!notify) {
-      notify = (await this.core.apis.GroupApi.getSingleScreenNotifies(true, 100)).find((e) => e.seq == flag);
+      notify = (await this.core.apis.GroupApi.getSingleScreenNotifies(true, count)).find((e) => e.seq == flag);
       return { doubt: true, notify };
     }
     return { doubt: false, notify };
@@ -63187,7 +63208,7 @@ class GetGroupSystemMsg extends OneBotAction {
 
 class GetPacketStatusDepends extends OneBotAction {
   async check(payload) {
-    if (!this.core.apis.PacketApi.available) {
+    if (!this.core.apis.PacketApi.packetStatus) {
       return {
         valid: false,
         message: "packetBackend不可用，请参照文档 https://napneko.github.io/config/advanced 和启动日志检查packetBackend状态或进行配置！错误堆栈信息：" + this.core.apis.PacketApi.clientLogStack
@@ -64457,10 +64478,10 @@ function createActionMap(obContext, core) {
 
 const name = "napcat";
 const type = "module";
-const version = "4.8.95";
-const scripts = {"build:universal":"npm run build:webui && vite build --mode universal || exit 1","build:framework":"npm run build:webui && vite build --mode framework || exit 1","build:shell":"npm run build:webui && vite build --mode shell || exit 1","build:webui":"cd napcat.webui && npm run build","dev:universal":"vite build --mode universal","dev:framework":"vite build --mode framework","dev:shell":"vite build --mode shell","dev:webui":"cd napcat.webui && npm run dev","lint":"eslint --fix src/**/*.{js,ts,vue}","depend":"cd dist && npm install --omit=dev","dev:depend":"npm i && cd napcat.webui && npm i"};
-const devDependencies = {"@babel/preset-typescript":"^7.24.7","@eslint/compat":"^1.3.1","@eslint/eslintrc":"^3.1.0","@eslint/js":"^9.31.0","@homebridge/node-pty-prebuilt-multiarch":"^0.12.0-beta.5","@log4js-node/log4js-api":"^1.0.2","@napneko/nap-proto-core":"^0.0.4","@rollup/plugin-node-resolve":"^16.0.0","@rollup/plugin-typescript":"^12.1.4","@sinclair/typebox":"^0.34.9","@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/multer":"^1.4.12","@types/node":"^22.0.1","@types/on-finished":"^2.3.4","@types/qrcode-terminal":"^0.12.2","@types/react-color":"^3.0.13","@types/type-is":"^1.6.7","@types/ws":"^8.5.12","@typescript-eslint/eslint-plugin":"^8.3.0","@typescript-eslint/parser":"^8.37.0","ajv":"^8.13.0","async-mutex":"^0.5.0","commander":"^13.0.0","cors":"^2.8.5","esbuild":"0.25.5","eslint":"^9.14.0","eslint-import-resolver-typescript":"^4.4.4","eslint-plugin-import":"^2.32.0","express-rate-limit":"^7.5.0","fast-xml-parser":"^4.3.6","file-type":"^21.0.0","globals":"^16.0.0","json5":"^2.2.3","multer":"^2.0.1","typescript":"^5.3.3","typescript-eslint":"^8.35.1","vite":"^6.0.1","vite-plugin-cp":"^6.0.0","vite-tsconfig-paths":"^5.1.0","napcat.protobuf":"^1.1.4","winston":"^3.17.0","compressing":"^1.10.1"};
-const dependencies = {"express":"^5.0.0","silk-wasm":"^3.6.1","ws":"^8.18.0"};
+const version = "4.8.98";
+const scripts = {"build:universal":"npm run build:webui && vite build --mode universal || exit 1","build:framework":"npm run build:webui && vite build --mode framework || exit 1","build:shell":"npm run build:webui && vite build --mode shell || exit 1","build:webui":"cd napcat.webui && npm run build","dev:universal":"vite build --mode universal","dev:framework":"vite build --mode framework","dev:shell":"vite build --mode shell","dev:shell-analysis":"vite build --mode shell-analysis","dev:webui":"cd napcat.webui && npm run dev","lint":"eslint --fix src/**/*.{js,ts,vue}","depend":"cd dist && npm install --omit=dev","dev:depend":"npm i && cd napcat.webui && npm i"};
+const devDependencies = {"@babel/core":"^7.28.0","@babel/generator":"^7.28.0","@babel/parser":"^7.28.0","@babel/preset-typescript":"^7.24.7","@babel/traverse":"^7.28.0","@babel/types":"^7.28.2","@eslint/compat":"^1.3.1","@eslint/eslintrc":"^3.1.0","@eslint/js":"^9.33.0","@homebridge/node-pty-prebuilt-multiarch":"^0.12.0-beta.5","@log4js-node/log4js-api":"^1.0.2","@napneko/nap-proto-core":"^0.0.4","@rollup/plugin-node-resolve":"^16.0.0","@rollup/plugin-typescript":"^12.1.4","@sinclair/typebox":"^0.34.38","@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/multer":"^1.4.12","@types/node":"^22.0.1","@types/on-finished":"^2.3.4","@types/qrcode-terminal":"^0.12.2","@types/react-color":"^3.0.13","@types/type-is":"^1.6.7","@types/ws":"^8.5.12","@typescript-eslint/eslint-plugin":"^8.3.0","@typescript-eslint/parser":"^8.39.0","ajv":"^8.13.0","async-mutex":"^0.5.0","commander":"^13.0.0","compressing":"^1.10.1","cors":"^2.8.5","esbuild":"0.25.8","eslint":"^9.14.0","eslint-import-resolver-typescript":"^4.4.4","eslint-plugin-import":"^2.32.0","express-rate-limit":"^7.5.0","fast-xml-parser":"^4.3.6","file-type":"^21.0.0","globals":"^16.0.0","json5":"^2.2.3","multer":"^2.0.1","napcat.protobuf":"^1.1.4","typescript":"^5.3.3","typescript-eslint":"^8.35.1","vite":"^7.1.1","vite-plugin-cp":"^6.0.0","vite-tsconfig-paths":"^5.1.0","winston":"^3.17.0"};
+const dependencies = {"express":"^5.0.0","silk-wasm":"^3.6.1","ws":"^8.18.3"};
 const packageJson = {
   name,
   "private": true,
@@ -65019,7 +65040,7 @@ class NapCatOneBot11Adapter {
     this.initMsgListener();
     this.initBuddyListener();
     this.initGroupListener();
-    WebUiDataRuntime.setQQVersion(this.core.context.basicInfoWrapper.getFullQQVesion());
+    WebUiDataRuntime.setQQVersion(this.core.context.basicInfoWrapper.getFullQQVersion());
     WebUiDataRuntime.setQQLoginInfo(selfInfo);
     WebUiDataRuntime.setQQLoginStatus(true);
     WebUiDataRuntime.setOnOB11ConfigChanged(async (newConfig) => {
@@ -90138,7 +90159,7 @@ async function initializeEngine(engine, basicInfoWrapper, dataPathGlobal, system
       base_path_prefix: "",
       platform_type: systemPlatform,
       app_type: 4,
-      app_version: basicInfoWrapper.getFullQQVesion(),
+      app_version: basicInfoWrapper.getFullQQVersion(),
       os_version: systemVersion2,
       use_xlog: false,
       qua: basicInfoWrapper.QQVersionQua ?? "",
@@ -90156,7 +90177,7 @@ async function initializeLoginService(loginService, basicInfoWrapper, dataPathGl
     appid: basicInfoWrapper.QQVersionAppid ?? "",
     platVer: systemVersion2,
     commonPath: dataPathGlobal,
-    clientVer: basicInfoWrapper.getFullQQVesion(),
+    clientVer: basicInfoWrapper.getFullQQVersion(),
     hostName: hostname2
   });
 }
@@ -90345,7 +90366,7 @@ async function NCoreInitShell() {
     });
   }
   const basicInfoWrapper = new QQBasicInfoWrapper({ logger });
-  const wrapper = loadQQWrapper(basicInfoWrapper.getFullQQVesion());
+  const wrapper = loadQQWrapper(basicInfoWrapper.getFullQQVersion());
   const o3Service = wrapper.NodeIO3MiscService.get();
   o3Service.addO3MiscListener(new NodeIO3MiscListener());
   logger.log("[NapCat] [Core] NapCat.Core Version: " + napCatVersion);
@@ -90374,7 +90395,7 @@ async function NCoreInitShell() {
   const sessionConfig = await genSessionConfig(
     guid,
     basicInfoWrapper.QQVersionAppid,
-    basicInfoWrapper.getFullQQVesion(),
+    basicInfoWrapper.getFullQQVersion(),
     selfInfo.uin,
     selfInfo.uid,
     dataPath
