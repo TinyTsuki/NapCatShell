@@ -28,7 +28,7 @@ import stream__default, { Readable, PassThrough, pipeline } from 'node:stream';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'node:url';
 import { Worker as Worker$1 } from 'worker_threads';
-import fs$1, { readFileSync as readFileSync$1, existsSync as existsSync$1 } from 'node:fs';
+import fs$1, { readFileSync as readFileSync$1, statSync as statSync$1, createReadStream, existsSync as existsSync$1 } from 'node:fs';
 import * as crypto from 'node:crypto';
 import crypto__default$1, { createHash } from 'node:crypto';
 import * as net from 'node:net';
@@ -24573,8 +24573,8 @@ class NTQQFileApi {
     this.core = core;
     this.rkeyManager = new RkeyManager(
       [
-        "https://secret-service.bietiaop.com/rkeys",
-        "http://ss.xingzhige.com/music_card/rkey"
+        "http://ss.xingzhige.com/music_card/rkey",
+        "https://secret-service.bietiaop.com/rkeys"
       ],
       this.context.logger
     );
@@ -24593,13 +24593,13 @@ class NTQQFileApi {
       throw error;
     }
   }
-  async getFileUrl(chatType, peer, fileUUID, file10MMd5) {
+  async getFileUrl(chatType, peer, fileUUID, file10MMd5, timeout = 2e4) {
     if (this.core.apis.PacketApi.packetStatus) {
       try {
         if (chatType === ChatType.KCHATTYPEGROUP && fileUUID) {
-          return this.core.apis.PacketApi.pkt.operation.GetGroupFileUrl(+peer, fileUUID);
+          return this.core.apis.PacketApi.pkt.operation.GetGroupFileUrl(+peer, fileUUID, timeout);
         } else if (file10MMd5 && fileUUID) {
-          return this.core.apis.PacketApi.pkt.operation.GetPrivateFileUrl(peer, fileUUID, file10MMd5);
+          return this.core.apis.PacketApi.pkt.operation.GetPrivateFileUrl(peer, fileUUID, file10MMd5, timeout);
         }
       } catch (error) {
         this.context.logger.logError("获取文件URL失败", error.message);
@@ -24607,7 +24607,7 @@ class NTQQFileApi {
     }
     throw new Error("fileUUID or file10MMd5 is undefined");
   }
-  async getPttUrl(peer, fileUUID) {
+  async getPttUrl(peer, fileUUID, timeout = 2e4) {
     if (this.core.apis.PacketApi.packetStatus && fileUUID) {
       let appid = new NapProtoMsg(FileId).decode(Buffer.from(fileUUID.replaceAll("-", "+").replaceAll("_", "/"), "base64")).appid;
       try {
@@ -24618,7 +24618,7 @@ class NTQQFileApi {
             uploadTime: 0,
             ttl: 0,
             subType: 0
-          });
+          }, timeout);
         } else if (fileUUID) {
           return this.core.apis.PacketApi.pkt.operation.GetPttUrl(peer, {
             fileUuid: fileUUID,
@@ -24626,7 +24626,7 @@ class NTQQFileApi {
             uploadTime: 0,
             ttl: 0,
             subType: 0
-          });
+          }, timeout);
         }
       } catch (error) {
         this.context.logger.logError("获取文件URL失败", error.message);
@@ -24634,7 +24634,7 @@ class NTQQFileApi {
     }
     throw new Error("packet cant get ptt url");
   }
-  async getVideoUrlPacket(peer, fileUUID) {
+  async getVideoUrlPacket(peer, fileUUID, timeout = 2e4) {
     if (this.core.apis.PacketApi.packetStatus && fileUUID) {
       let appid = new NapProtoMsg(FileId).decode(Buffer.from(fileUUID.replaceAll("-", "+").replaceAll("_", "/"), "base64")).appid;
       try {
@@ -24645,7 +24645,7 @@ class NTQQFileApi {
             uploadTime: 0,
             ttl: 0,
             subType: 0
-          });
+          }, timeout);
         } else if (fileUUID) {
           return this.core.apis.PacketApi.pkt.operation.GetVideoUrl(peer, {
             fileUuid: fileUUID,
@@ -24653,7 +24653,7 @@ class NTQQFileApi {
             uploadTime: 0,
             ttl: 0,
             subType: 0
-          });
+          }, timeout);
         }
       } catch (error) {
         this.context.logger.logError("获取文件URL失败", error.message);
@@ -24777,22 +24777,21 @@ class NTQQFileApi {
     const thumbDir = path2.replace(`${path$1.sep}Ori${path$1.sep}`, `${path$1.sep}Thumb${path$1.sep}`);
     fs__default.mkdirSync(path$1.dirname(thumbDir), { recursive: true });
     const thumbPath = path$1.join(path$1.dirname(thumbDir), `${md5}_0.png`);
+    try {
+      videoInfo = await FFmpegService.getVideoInfo(filePath, thumbPath);
+      if (!fs__default.existsSync(thumbPath)) {
+        this.context.logger.logError("获取视频缩略图失败", new Error("缩略图不存在"));
+        throw new Error("获取视频缩略图失败");
+      }
+    } catch (e) {
+      this.context.logger.logError("获取视频信息失败", e);
+      fs__default.writeFileSync(thumbPath, Buffer.from(defaultVideoThumbB64, "base64"));
+    }
     if (_diyThumbPath) {
       try {
         await this.copyFile(_diyThumbPath, thumbPath);
       } catch (e) {
         this.context.logger.logError("复制自定义缩略图失败", e);
-      }
-    } else {
-      try {
-        videoInfo = await FFmpegService.getVideoInfo(filePath, thumbPath);
-        if (!fs__default.existsSync(thumbPath)) {
-          this.context.logger.logError("获取视频缩略图失败", new Error("缩略图不存在"));
-          throw new Error("获取视频缩略图失败");
-        }
-      } catch (e) {
-        this.context.logger.logError("获取视频信息失败", e);
-        fs__default.writeFileSync(thumbPath, Buffer.from(defaultVideoThumbB64, "base64"));
       }
     }
     context.deleteAfterSentFiles.push(thumbPath);
@@ -26192,7 +26191,7 @@ class NTQQMsgApi {
     return this.context.session.getMsgService().getMsgsIncludeSelf(peer, msgId, count, isReverseOrder);
   }
   async recallMsg(peer, msgId) {
-    await this.core.eventWrapper.callNormalEventV2(
+    return await this.core.eventWrapper.callNormalEventV2(
       "NodeIKernelMsgService/recallMsg",
       "NodeIKernelMsgListener/onMsgInfoListUpdate",
       [peer, [msgId]],
@@ -26536,6 +26535,141 @@ class NTQQUserApi {
   }
 }
 
+function qunAlbumControl({
+  uin,
+  group_id,
+  pskey,
+  pic_md5,
+  img_size,
+  img_name,
+  sAlbumName,
+  sAlbumID,
+  photo_num = "1",
+  video_num = "0",
+  batch_num = "1"
+}) {
+  const timestamp = Math.floor(Date.now() / 1e3);
+  return {
+    control_req: [
+      {
+        uin,
+        token: {
+          type: 4,
+          data: pskey,
+          appid: 5
+        },
+        appid: "qun",
+        checksum: pic_md5,
+        check_type: 0,
+        file_len: img_size,
+        env: {
+          refer: "qzone",
+          deviceInfo: "h5"
+        },
+        model: 0,
+        biz_req: {
+          sPicTitle: img_name,
+          sPicDesc: "",
+          sAlbumName,
+          sAlbumID,
+          iAlbumTypeID: 0,
+          iBitmap: 0,
+          iUploadType: 0,
+          iUpPicType: 0,
+          iBatchID: timestamp,
+          sPicPath: "",
+          iPicWidth: 0,
+          iPicHight: 0,
+          iWaterType: 0,
+          iDistinctUse: 0,
+          iNeedFeeds: 1,
+          iUploadTime: timestamp,
+          mapExt: {
+            appid: "qun",
+            userid: group_id
+          },
+          stExtendInfo: {
+            mapParams: {
+              photo_num,
+              video_num,
+              batch_num
+            }
+          }
+        },
+        session: "",
+        asy_upload: 0,
+        cmd: "FileUpload"
+      }
+    ]
+  };
+}
+
+function createAlbumMediaFeed(uin, albumId, lloc) {
+  return {
+    cell_common: {
+      time: ""
+    },
+    cell_user_info: {
+      user: {
+        uin
+      }
+    },
+    cell_media: {
+      album_id: albumId,
+      batch_id: "",
+      media_items: [{
+        image: {
+          lloc
+        }
+      }]
+    }
+  };
+}
+function createAlbumCommentRequest(uin, content, client_key) {
+  return {
+    client_key,
+    //暂时只支持纯文本吧
+    content: [{
+      type: 0 /* KRICHMSGTYPEPLAINTEXT */,
+      content,
+      who: 0,
+      uid: "",
+      name: "",
+      url: ""
+    }],
+    user: {
+      uin
+    }
+  };
+}
+function createAlbumFeedPublish(qunId, uin, albumId, lloc, sloc) {
+  return {
+    cell_common: {
+      time: Date.now(),
+      feed_id: ""
+    },
+    cell_user_info: {
+      user: {
+        uin
+      }
+    },
+    cell_media: {
+      album_id: albumId,
+      batch_id: 0,
+      media_items: [{
+        type: 0,
+        image: {
+          lloc,
+          sloc: sloc || lloc
+        }
+      }]
+    },
+    cell_qun_info: {
+      qun_id: qunId
+    }
+  };
+}
+
 class NTQQWebApi {
   context;
   core;
@@ -26795,64 +26929,174 @@ class NTQQWebApi {
     }
     return (hash & 2147483647).toString();
   }
-  async createQunAlbumSession(gc, sAlbumID, sAlbumName, path, skey, pskey, uin) {
+  async getAlbumListByNTQQ(gc) {
+    return await this.context.session.getAlbumService().getAlbumList({
+      qun_id: gc,
+      attach_info: "",
+      seq: 3331,
+      request_time_line: {
+        request_invoke_time: "0"
+      }
+    });
+  }
+  async getAlbumList(gc) {
+    const skey = await this.core.apis.UserApi.getSKey() || "";
+    const pskey = (await this.core.apis.UserApi.getPSkey(["qzone.qq.com"])).domainPskeyMap.get("qzone.qq.com") || "";
+    const bkn = this.getBknFromSKey(skey);
+    const uin = this.core.selfInfo.uin || "10001";
+    const cookies = `p_uin=o${this.core.selfInfo.uin}; p_skey=${pskey}; skey=${skey}; uin=o${uin} `;
+    const api = `https://h5.qzone.qq.com/proxy/domain/u.photo.qzone.qq.com/cgi-bin/upp/qun_list_album_v2?`;
+    const params = new URLSearchParams({
+      random: "7570",
+      g_tk: bkn,
+      format: "json",
+      inCharset: "utf-8",
+      outCharset: "utf-8",
+      qua: "V1_IPH_SQ_6.2.0_0_HDBM_T",
+      cmd: "qunGetAlbumList",
+      qunId: gc,
+      qunid: gc,
+      start: "0",
+      num: "1000",
+      uin,
+      getMemberRole: "0"
+    });
+    const response = await RequestUtil.HttpGetJson(api + params.toString(), "GET", "", {
+      "Cookie": cookies
+    });
+    return response.data.album;
+  }
+  async createQunAlbumSession(gc, sAlbumID, sAlbumName, path, skey, pskey, img_md5, uin) {
     const img = readFileSync$1(path);
-    const img_md5 = createHash("md5").update(img).digest("hex");
     const img_size = img.length;
     const img_name = basename(path);
-    const time = Math.floor(Date.now() / 1e3);
-    const GTK = this.getBknFromSKey(pskey);
-    const cookie = `p_uin=${uin}; p_skey=${pskey}; skey=${skey}; uin=${uin}`;
-    const body = {
-      control_req: [{
-        uin,
-        token: {
-          type: 4,
-          data: pskey,
-          appid: 5
-        },
-        appid: "qun",
-        checksum: img_md5,
-        check_type: 0,
-        file_len: img_size,
-        env: {
-          refer: "qzone",
-          deviceInfo: "h5"
-        },
-        model: 0,
-        biz_req: {
-          sPicTitle: img_name,
-          sPicDesc: "",
-          sAlbumName,
-          sAlbumID,
-          iAlbumTypeID: 0,
-          iBitmap: 0,
-          iUploadType: 0,
-          iUpPicType: 0,
-          iBatchID: time,
-          sPicPath: "",
-          iPicWidth: 0,
-          iPicHight: 0,
-          iWaterType: 0,
-          iDistinctUse: 0,
-          iNeedFeeds: 1,
-          iUploadTime: time,
-          mapExt: {
-            appid: "qun",
-            userid: gc
-          }
-        },
-        session: "",
-        asy_upload: 0,
-        cmd: "FileUpload"
-      }]
-    };
+    const GTK = this.getBknFromSKey(skey);
+    const cookie = `p_uin=o${uin}; p_skey=${pskey}; skey=${skey}; uin=o${uin}`;
+    const body = qunAlbumControl({
+      uin,
+      group_id: gc,
+      pskey,
+      pic_md5: img_md5,
+      img_size,
+      img_name,
+      sAlbumName,
+      sAlbumID
+    });
     const api = `https://h5.qzone.qq.com/webapp/json/sliceUpload/FileBatchControl/${img_md5}?g_tk=${GTK}`;
     const post = await RequestUtil.HttpGetJson(api, "POST", body, {
       "Cookie": cookie,
       "Content-Type": "application/json"
     });
     return post;
+  }
+  async uploadQunAlbumSlice(path, session, skey, pskey, uin, slice_size) {
+    const img_size = statSync$1(path).size;
+    let seq = 0;
+    let offset = 0;
+    const GTK = this.getBknFromSKey(skey);
+    const cookie = `p_uin=o${uin}; p_skey=${pskey}; skey=${skey}; uin=o${uin}`;
+    const stream = createReadStream(path, { highWaterMark: slice_size });
+    for await (const chunk of stream) {
+      const end = Math.min(offset + chunk.length, img_size);
+      const form = new FormData();
+      form.append("uin", uin);
+      form.append("appid", "qun");
+      form.append("session", session);
+      form.append("offset", offset.toString());
+      form.append("data", new Blob([chunk], { type: "application/octet-stream" }), "blob");
+      form.append("checksum", "");
+      form.append("check_type", "0");
+      form.append("retry", "0");
+      form.append("seq", seq.toString());
+      form.append("end", end.toString());
+      form.append("cmd", "FileUpload");
+      form.append("slice_size", slice_size.toString());
+      form.append("biz_req.iUploadType", "0");
+      const api = `https://h5.qzone.qq.com/webapp/json/sliceUpload/FileUpload?seq=${seq}&retry=0&offset=${offset}&end=${end}&total=${img_size}&type=form&g_tk=${GTK}`;
+      const response = await fetch(api, {
+        method: "POST",
+        headers: {
+          "Cookie": cookie
+        },
+        body: form
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const post = await response.json();
+      if (post.ret !== 0) {
+        throw new Error(`分片 ${seq} 上传失败: ${post.msg}`);
+      }
+      offset += chunk.length;
+      seq++;
+    }
+    return { success: true, message: "上传完成" };
+  }
+  async uploadImageToQunAlbum(gc, sAlbumID, sAlbumName, path) {
+    const skey = await this.core.apis.UserApi.getSKey() || "";
+    const pskey = (await this.core.apis.UserApi.getPSkey(["qzone.qq.com"])).domainPskeyMap.get("qzone.qq.com") || "";
+    const img_md5 = createHash("md5").update(readFileSync$1(path)).digest("hex");
+    const uin = this.core.selfInfo.uin || "10001";
+    const session = (await this.createQunAlbumSession(gc, sAlbumID, sAlbumName, path, skey, pskey, img_md5, uin)).data.session;
+    if (!session) throw new Error("创建群相册会话失败");
+    await this.uploadQunAlbumSlice(path, session, skey, pskey, uin, 16384);
+  }
+  async getAlbumMediaListByNTQQ(gc, albumId, attach_info = "") {
+    return (await this.context.session.getAlbumService().getMediaList({
+      qun_id: gc,
+      attach_info,
+      seq: 0,
+      request_time_line: {
+        request_invoke_time: "0"
+      },
+      album_id: albumId,
+      lloc: "",
+      batch_id: ""
+    })).response;
+  }
+  async doAlbumMediaPlainCommentByNTQQ(qunId, albumId, lloc, content) {
+    const random_seq = Math.floor(Math.random() * 9e3) + 1e3;
+    const uin = this.core.selfInfo.uin || "10001";
+    const client_key = Date.now() * 1e3;
+    return await this.context.session.getAlbumService().doQunComment(
+      random_seq,
+      {
+        map_info: [],
+        map_bytes_info: [],
+        map_user_account: []
+      },
+      qunId,
+      2,
+      createAlbumMediaFeed(uin, albumId, lloc),
+      createAlbumCommentRequest(uin, content, client_key)
+    );
+  }
+  async deleteAlbumMediaByNTQQ(qunId, albumId, lloc) {
+    const random_seq = Math.floor(Math.random() * 9e3) + 1e3;
+    return await this.context.session.getAlbumService().deleteMedias(
+      random_seq,
+      qunId,
+      albumId,
+      [lloc],
+      []
+    );
+  }
+  async doAlbumMediaLikeByNTQQ(qunId, albumId, lloc, id) {
+    const random_seq = Math.floor(Math.random() * 9e3) + 1e3;
+    const uin = this.core.selfInfo.uin || "10001";
+    return await this.context.session.getAlbumService().doQunLike(
+      random_seq,
+      {
+        map_info: [],
+        map_bytes_info: [],
+        map_user_account: []
+      },
+      {
+        id,
+        status: 1
+      },
+      createAlbumFeedPublish(qunId, uin, albumId, lloc)
+    );
   }
 }
 
@@ -27003,6 +27247,16 @@ const offset = {
   "3.2.18-37625-arm64": {"send":"7A350D8","recv":"7A38A68"},
   "9.9.21-38503-x64": {"send":"3105F38","recv":"31096DC"},
   "3.2.19-38503-x64": {"send":"B2C1A60","recv":"B2C54E0"},
+  "3.2.19-38626-x64": {"send":"B2C1BE0","recv":"B2C5660"},
+  "9.9.21-38626-x64": {"send":"310A758","recv":"310DEFC"},
+  "3.2.19-38626-arm64": {"send":"7A8A490","recv":"7A8DE20"},
+  "9.9.21-38711-x64": {"send":"310A758","recv":"310DEFC"},
+  "3.2.19-38960-x64": {"send":"B3740E0","recv":"B377B60"},
+  "9.9.21-38960-x64": {"send":"313F7D8","recv":"3142F7C"},
+  "3.2.19-38960-arm64": {"send":"7B01D98","recv":"7B05728"},
+  "3.2.19-39038-x64": {"send":"B3759E0","recv":"B379460"},
+  "3.2.19-39038-arm64": {"send":"7B025C8","recv":"7B05F58"},
+  "9.9.21-39038-x64": {"send":"313FB58","recv":"31432FC"},
 };
 
 class Frame {
@@ -28715,6 +28969,11 @@ const Language = {
   languageDesc: ProtoField(2, ScalarType.STRING)
 };
 
+const OidbSvcTrpcTcp0XF90_1 = {
+  groupUin: ProtoField(1, ScalarType.UINT32),
+  msgSeq: ProtoField(2, ScalarType.UINT64)
+};
+
 class IHighwayUploader {
   trans;
   logger;
@@ -30266,6 +30525,23 @@ let RenameGroupFile$1 = class RenameGroupFile extends PacketTransformer {
 };
 const RenameGroupFile$2 = new RenameGroupFile$1();
 
+let SetGroupTodo$1 = class SetGroupTodo extends PacketTransformer {
+  constructor() {
+    super();
+  }
+  build(peer, msgSeq) {
+    const data = new NapProtoMsg(OidbSvcTrpcTcp0XF90_1).encode({
+      groupUin: peer,
+      msgSeq: BigInt(msgSeq)
+    });
+    return OidbBase$1.build(3984, 1, data);
+  }
+  parse(data) {
+    return OidbBase$1.parse(data);
+  }
+};
+const SetGroupTodo$2 = new SetGroupTodo$1();
+
 class DownloadGroupFile extends PacketTransformer {
   constructor() {
     super();
@@ -31786,43 +32062,6 @@ class NapCoreContext {
   sendSsoCmdReqByContend = (cmd, trace_id) => this.core.context.session.getMsgService().sendSsoCmdReqByContend(cmd, trace_id);
 }
 
-class LRUCache {
-  capacity;
-  cache;
-  constructor(capacity) {
-    this.capacity = capacity;
-    this.cache = /* @__PURE__ */ new Map();
-  }
-  get(key) {
-    const value = this.cache.get(key);
-    if (value !== void 0) {
-      this.cache.delete(key);
-      this.cache.set(key, value);
-    }
-    return value;
-  }
-  put(key, value) {
-    if (this.cache.has(key)) {
-      this.cache.delete(key);
-    } else if (this.cache.size >= this.capacity) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== void 0) {
-        this.cache.delete(firstKey);
-      }
-    }
-    this.cache.set(key, value);
-  }
-  resetCapacity(newCapacity) {
-    this.capacity = newCapacity;
-    while (this.cache.size > this.capacity) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== void 0) {
-        this.cache.delete(firstKey);
-      }
-    }
-  }
-}
-
 function randText(len) {
   let text = "";
   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -31834,8 +32073,8 @@ function randText(len) {
 class IPacketClient {
   napcore;
   logger;
-  cb = new LRUCache(500);
-  // trace_id-type callback
+  cb = /* @__PURE__ */ new Map();
+  // hash-type callback
   logStack;
   available = false;
   constructor(napCore, logger, logStack) {
@@ -31843,19 +32082,19 @@ class IPacketClient {
     this.logger = logger;
     this.logStack = logStack;
   }
-  async registerCallback(trace_id, type, callback) {
-    this.cb.put(createHash$1("md5").update(trace_id).digest("hex") + type, callback);
-  }
-  async sendCommand(cmd, data, trace_id, rsp = false, timeout = 2e4, sendcb = () => {
+  async sendCommand(cmd, data, trace_data, rsp = false, timeout = 2e4, sendcb = () => {
   }) {
     return new Promise((resolve, reject) => {
       if (!this.available) {
         reject(new Error("packetBackend 当前不可用！"));
       }
+      let hash = createHash$1("md5").update(trace_data).digest("hex");
       const timeoutHandle = setTimeout(() => {
-        reject(new Error(`sendCommand timed out after ${timeout} ms for ${cmd} with trace_id ${trace_id}`));
+        this.cb.delete(hash + "send");
+        this.cb.delete(hash + "recv");
+        reject(new Error(`sendCommand timed out after ${timeout} ms for ${cmd} with hash ${hash}`));
       }, timeout);
-      this.registerCallback(trace_id, "send", async (json) => {
+      this.cb.set(hash + "send", async (json) => {
         sendcb(json);
         if (!rsp) {
           clearTimeout(timeoutHandle);
@@ -31863,31 +32102,33 @@ class IPacketClient {
         }
       });
       if (rsp) {
-        this.registerCallback(trace_id, "recv", async (json) => {
+        this.cb.set(hash + "recv", async (json) => {
           clearTimeout(timeoutHandle);
           resolve(json);
         });
       }
-      this.sendCommandImpl(cmd, data, trace_id);
+      this.sendCommandImpl(cmd, data, hash, timeout);
     });
   }
-  async sendPacket(cmd, data, rsp = false) {
+  async sendPacket(cmd, data, rsp = false, timeout = 2e4) {
     const md5 = crypto__default.createHash("md5").update(data).digest("hex");
-    const trace_id = (randText(4) + md5 + data).slice(0, data.length / 2);
-    return this.sendCommand(cmd, data, trace_id, rsp, 2e4, async () => {
-      await this.napcore.sendSsoCmdReqByContend(cmd, trace_id);
+    const trace_data = (randText(4) + md5 + data).slice(0, data.length / 2);
+    return this.sendCommand(cmd, data, trace_data, rsp, timeout, async () => {
+      await this.napcore.sendSsoCmdReqByContend(cmd, trace_data);
     });
   }
-  async sendOidbPacket(pkt, rsp = false) {
-    return this.sendPacket(pkt.cmd, pkt.data, rsp);
+  async sendOidbPacket(pkt, rsp = false, timeout = 2e4) {
+    return this.sendPacket(pkt.cmd, pkt.data, rsp, timeout);
   }
 }
 
 class NativePacketClient extends IPacketClient {
   supportedPlatforms = ["win32.x64", "linux.x64", "linux.arm64", "darwin.x64", "darwin.arm64"];
   MoeHooExport = { exports: {} };
-  sendEvent = new LRUCache(500);
-  // seq->trace_id
+  sendEvent = /* @__PURE__ */ new Map();
+  // seq - hash
+  timeEvent = /* @__PURE__ */ new Map();
+  // hash - timeout
   constructor(napCore, logger, logStack) {
     super(napCore, logger, logStack);
   }
@@ -31910,22 +32151,28 @@ class NativePacketClient extends IPacketClient {
     const moehoo_path = path__default.join(dirname(fileURLToPath$1(import.meta.url)), "./moehoo/MoeHoo." + platform + (isNewQQ ? ".new" : "") + ".node");
     process.dlopen(this.MoeHooExport, moehoo_path, constants.dlopen.RTLD_LAZY);
     this.MoeHooExport.exports.InitHook?.(send, recv, (type, _uin, cmd, seq, hex_data) => {
-      const trace_id = createHash$1("md5").update(Buffer.from(hex_data, "hex")).digest("hex");
-      if (type === 0 && this.cb.get(trace_id + "recv")) {
-        this.sendEvent.put(seq, trace_id);
+      const hash = createHash$1("md5").update(Buffer.from(hex_data, "hex")).digest("hex");
+      if (type === 0 && this.cb.get(hash + "recv")) {
+        this.sendEvent.set(seq, hash);
+        setTimeout(() => {
+          this.sendEvent.delete(seq);
+          this.timeEvent.delete(hash);
+        }, +(this.timeEvent.get(hash) ?? 2e4));
       }
       if (type === 1 && this.sendEvent.get(seq)) {
-        const trace_id2 = this.sendEvent.get(seq);
-        const callback = this.cb.get(trace_id2 + "recv");
+        const hash2 = this.sendEvent.get(seq);
+        const callback = this.cb.get(hash2 + "recv");
         callback?.({ seq, cmd, hex_data });
       }
     }, this.napcore.config.o3HookMode == 1);
     this.available = true;
   }
-  sendCommandImpl(cmd, data, trace_id) {
-    const trace_id_md5 = createHash$1("md5").update(trace_id).digest("hex");
-    this.MoeHooExport.exports.SendPacket?.(cmd, data, trace_id_md5);
-    this.cb.get(trace_id_md5 + "send")?.({ seq: 0, cmd, hex_data: "" });
+  sendCommandImpl(cmd, data, hash, timeout) {
+    this.timeEvent.set(hash, setTimeout(() => {
+      this.timeEvent.delete(hash);
+    }, timeout));
+    this.MoeHooExport.exports.SendPacket?.(cmd, data, hash);
+    this.cb.get(hash + "send")?.({ seq: 0, cmd, hex_data: "" });
   }
 }
 
@@ -31980,8 +32227,8 @@ class PacketClientContext {
   async init(pid, recv, send) {
     await this._client.init(pid, recv, send);
   }
-  async sendOidbPacket(pkt, rsp) {
-    const raw = await this._client.sendOidbPacket(pkt, rsp);
+  async sendOidbPacket(pkt, rsp, timeout) {
+    const raw = await this._client.sendOidbPacket(pkt, rsp, timeout);
     return rsp ? Buffer.from(raw.hex_data, "hex") : void 0;
   }
   newClient() {
@@ -32134,9 +32381,13 @@ class PacketOperationContext {
     const req = SendPoke$2.build(is_group, peer, target ?? peer);
     await this.context.client.sendOidbPacket(req);
   }
-  async FetchRkey() {
+  async SetGroupTodo(groupUin, msgSeq) {
+    const req = SetGroupTodo$2.build(groupUin, msgSeq);
+    await this.context.client.sendOidbPacket(req, true);
+  }
+  async FetchRkey(timeout = 1e4) {
     const req = FetchRkey$1.build();
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = FetchRkey$1.parse(resp);
     return res.data.rkeyList;
   }
@@ -32209,33 +32460,33 @@ class PacketOperationContext {
     const res = DownloadImage$1.parse(resp);
     return `https://${res.download.info.domain}${res.download.info.urlPath}${res.download.rKeyParam}`;
   }
-  async GetPttUrl(selfUid, node) {
+  async GetPttUrl(selfUid, node, timeout = 2e4) {
     const req = DownloadPtt$1.build(selfUid, node);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadPtt$1.parse(resp);
     return `https://${res.download.info.domain}${res.download.info.urlPath}${res.download.rKeyParam}`;
   }
-  async GetVideoUrl(selfUid, node) {
+  async GetVideoUrl(selfUid, node, timeout = 2e4) {
     const req = DownloadVideo$1.build(selfUid, node);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadVideo$1.parse(resp);
     return `https://${res.download.info.domain}${res.download.info.urlPath}${res.download.rKeyParam}`;
   }
-  async GetGroupImageUrl(groupUin, node) {
+  async GetGroupImageUrl(groupUin, node, timeout = 2e4) {
     const req = DownloadGroupImage$1.build(groupUin, node);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadImage$1.parse(resp);
     return `https://${res.download.info.domain}${res.download.info.urlPath}${res.download.rKeyParam}`;
   }
-  async GetGroupPttUrl(groupUin, node) {
+  async GetGroupPttUrl(groupUin, node, timeout = 2e4) {
     const req = DownloadGroupPtt$1.build(groupUin, node);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadImage$1.parse(resp);
     return `https://${res.download.info.domain}${res.download.info.urlPath}${res.download.rKeyParam}`;
   }
-  async GetGroupVideoUrl(groupUin, node) {
+  async GetGroupVideoUrl(groupUin, node, timeout = 2e4) {
     const req = DownloadGroupVideo$1.build(groupUin, node);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadImage$1.parse(resp);
     return `https://${res.download.info.domain}${res.download.info.urlPath}${res.download.rKeyParam}`;
   }
@@ -32312,15 +32563,15 @@ class PacketOperationContext {
     const res = RenameGroupFile$2.parse(resp);
     return res.rename.retCode;
   }
-  async GetGroupFileUrl(groupUin, fileUUID) {
+  async GetGroupFileUrl(groupUin, fileUUID, timeout = 2e4) {
     const req = DownloadGroupFile$1.build(groupUin, fileUUID);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadGroupFile$1.parse(resp);
     return `https://${res.download.downloadDns}/ftn_handler/${Buffer.from(res.download.downloadUrl).toString("hex")}/?fname=`;
   }
-  async GetPrivateFileUrl(self_id, fileUUID, md5) {
+  async GetPrivateFileUrl(self_id, fileUUID, md5, timeout = 2e4) {
     const req = DownloadPrivateFile$1.build(self_id, fileUUID, md5);
-    const resp = await this.context.client.sendOidbPacket(req, true);
+    const resp = await this.context.client.sendOidbPacket(req, true, timeout);
     const res = DownloadPrivateFile$1.parse(resp);
     return `http://${res.body?.result?.server}:${res.body?.result?.port}${res.body?.result?.url?.slice(8)}&isthumb=0`;
   }
@@ -32469,7 +32720,7 @@ class PacketClientSession {
   }
 }
 
-const napCatVersion = "4.8.98";
+const napCatVersion = "4.8.106";
 
 const typedOffset = offset;
 class NTQQPacketApi {
@@ -32519,7 +32770,7 @@ class NTQQPacketApi {
     this.pkt = new PacketClientSession(this.core);
     await this.pkt.init(process.pid, table.recv, table.send);
     try {
-      await this.pkt.operation.FetchRkey();
+      await this.pkt.operation.FetchRkey(1500);
     } catch (error) {
       this.logger.logError("测试Packet状态异常", error);
       return false;
@@ -45800,6 +46051,7 @@ class NapCatPathWrapper {
   configPath;
   cachePath;
   staticPath;
+  pluginPath;
   constructor(mainPath = dirname(fileURLToPath$1(import.meta.url))) {
     this.binaryPath = mainPath;
     let writePath;
@@ -45812,6 +46064,7 @@ class NapCatPathWrapper {
     }
     this.logsPath = path__default.join(writePath, "logs");
     this.configPath = path__default.join(writePath, "config");
+    this.pluginPath = path__default.join(writePath, "plugins");
     this.cachePath = path__default.join(writePath, "cache");
     this.staticPath = path__default.join(this.binaryPath, "static");
     if (!fs__default.existsSync(this.logsPath)) {
@@ -45918,6 +46171,12 @@ const AppidTable = {
   "3.2.18-37625": {"appid":537304261,"qua":"V1_LNX_NQ_3.2.18_37625_GW_B"},
   "9.9.21-38503": {"appid":537307604,"qua":"V1_WIN_NQ_9.9.21_38503_GW_B"},
   "3.2.19-38503": {"appid":537307640,"qua":"V1_LNX_NQ_3.2.19_38503_GW_B"},
+  "3.2.19-38626": {"appid":537307691,"qua":"V1_LNX_NQ_3.2.19_38626_GW_B"},
+  "9.9.21-38711": {"appid":537307655,"qua":"V1_WIN_NQ_9.9.21_38626_GW_B"},
+  "9.9.21-38960": {"appid":537313855,"qua":"V1_WIN_NQ_9.9.21_38960_GW_B"},
+  "3.2.19-38960": {"appid":537313891,"qua":"V1_LNX_NQ_3.2.19_38960_GW_B"},
+  "3.2.19-39038": {"appid":537313942,"qua":"V1_LNX_NQ_3.2.19_39038_GW_B"},
+  "9.9.21-39038": {"appid":537313906,"qua":"V1_WIN_NQ_9.9.21_39038_GW_B"},
 };
 
 class QQBasicInfoWrapper {
@@ -51246,6 +51505,13 @@ class OB11HeartbeatEvent extends OB11BaseMetaEvent {
 }
 
 const ActionName = {
+  DelGroupAlbumMedia: "del_group_album_media",
+  SetGroupAlbumMediaLike: "set_group_album_media_like",
+  DoGroupAlbumComment: "do_group_album_comment",
+  GetGroupAlbumMediaList: "get_group_album_media_list",
+  UploadImageToQunAlbum: "upload_image_to_qun_album",
+  GetQunAlbumList: "get_qun_album_list",
+  SetGroupTodo: "set_group_todo",
   SetGroupKickMembers: "set_group_kick_members",
   SetGroupRobotAddOption: "set_group_robot_add_option",
   SetGroupAddOption: "set_group_add_option",
@@ -59617,6 +59883,43 @@ class OB11GroupRequestEvent extends OB11BaseRequestEvent {
   }
 }
 
+class LRUCache {
+  capacity;
+  cache;
+  constructor(capacity) {
+    this.capacity = capacity;
+    this.cache = /* @__PURE__ */ new Map();
+  }
+  get(key) {
+    const value = this.cache.get(key);
+    if (value !== void 0) {
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+  put(key, value) {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.capacity) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== void 0) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
+  resetCapacity(newCapacity) {
+    this.capacity = newCapacity;
+    while (this.cache.size > this.capacity) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== void 0) {
+        this.cache.delete(firstKey);
+      }
+    }
+  }
+}
+
 class CleanupQueue {
   tasks = /* @__PURE__ */ new Map();
   MAX_RETRIES = 3;
@@ -59782,6 +60085,211 @@ class CleanupQueue {
 }
 const cleanTaskQueue = new CleanupQueue();
 
+class ResourceManager {
+  resources = /* @__PURE__ */ new Map();
+  destroyed = false;
+  healthCheckTimer;
+  HEALTH_CHECK_TASK_INTERVAL = 5e3;
+  // 5秒执行一次健康检查任务
+  constructor() {
+    this.startHealthCheckTask();
+  }
+  /**
+   * 注册资源（注册即调用，重复注册只实际注册一次）
+   */
+  async register(key, config, ...args) {
+    if (this.destroyed) {
+      throw new Error("ResourceManager has been destroyed");
+    }
+    const registrationKey = this.generateRegistrationKey(key, config);
+    if (this.resources.has(key)) {
+      const existingState = this.resources.get(key);
+      if (existingState.registrationKey === registrationKey) {
+        return this.callResource(key, ...args);
+      }
+      this.unregister(key);
+    }
+    const state = {
+      config: {
+        disableTime: 3e4,
+        maxRetries: 3,
+        healthCheckInterval: 6e4,
+        maxHealthCheckFailures: 5,
+        name: key,
+        ...config
+      },
+      isEnabled: true,
+      disableUntil: 0,
+      currentRetries: 0,
+      healthCheckFailureCount: 0,
+      isPermanentlyDisabled: false,
+      lastHealthCheckTime: 0,
+      registrationKey
+    };
+    this.resources.set(key, state);
+    return await this.callResource(key, ...args);
+  }
+  /**
+   * 调用资源
+   */
+  async callResource(key, ...args) {
+    const state = this.resources.get(key);
+    if (!state) {
+      throw new Error(`Resource ${key} not registered`);
+    }
+    if (state.isPermanentlyDisabled) {
+      throw new Error(`Resource ${key} is permanently disabled due to repeated health check failures`);
+    }
+    if (!this.isResourceAvailable(key)) {
+      const disableUntilDate = new Date(state.disableUntil).toISOString();
+      throw new Error(`Resource ${key} is currently disabled until ${disableUntilDate}`);
+    }
+    try {
+      const result = await state.config.resourceFn(...args);
+      this.onResourceSuccess(state);
+      return result;
+    } catch (error) {
+      this.onResourceFailure(state, error);
+      throw error;
+    }
+  }
+  /**
+   * 检查资源是否可用
+   */
+  isResourceAvailable(key) {
+    const state = this.resources.get(key);
+    if (!state) {
+      return false;
+    }
+    if (state.isPermanentlyDisabled || !state.isEnabled) {
+      return false;
+    }
+    return Date.now() >= state.disableUntil;
+  }
+  /**
+   * 注销资源
+   */
+  unregister(key) {
+    return this.resources.delete(key);
+  }
+  /**
+   * 销毁管理器，清理所有资源
+   */
+  destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.stopHealthCheckTask();
+    this.resources.clear();
+    this.destroyed = true;
+  }
+  generateRegistrationKey(key, config) {
+    const configStr = JSON.stringify({
+      name: config.name,
+      disableTime: config.disableTime,
+      maxRetries: config.maxRetries,
+      healthCheckInterval: config.healthCheckInterval,
+      maxHealthCheckFailures: config.maxHealthCheckFailures,
+      functionStr: config.resourceFn.toString(),
+      healthCheckFnStr: config.healthCheckFn?.toString()
+    });
+    return `${key}_${this.simpleHash(configStr)}`;
+  }
+  simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
+  }
+  onResourceSuccess(state) {
+    state.currentRetries = 0;
+    state.disableUntil = 0;
+    state.healthCheckFailureCount = 0;
+    state.lastError = void 0;
+  }
+  onResourceFailure(state, error) {
+    state.currentRetries++;
+    state.lastError = error;
+    if (state.currentRetries >= state.config.maxRetries) {
+      state.disableUntil = Date.now() + state.config.disableTime;
+      state.currentRetries = 0;
+    }
+  }
+  startHealthCheckTask() {
+    if (this.healthCheckTimer) {
+      return;
+    }
+    this.healthCheckTimer = setInterval(() => {
+      this.runHealthCheckTask();
+    }, this.HEALTH_CHECK_TASK_INTERVAL);
+  }
+  stopHealthCheckTask() {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = void 0;
+    }
+  }
+  async runHealthCheckTask() {
+    if (this.destroyed) {
+      return;
+    }
+    const now = Date.now();
+    for (const [key, state] of this.resources) {
+      if (state.isPermanentlyDisabled || this.isResourceAvailable(key)) {
+        continue;
+      }
+      if (now < state.disableUntil) {
+        continue;
+      }
+      const lastHealthCheck = state.lastHealthCheckTime || 0;
+      const healthCheckInterval = state.config.healthCheckInterval;
+      if (now - lastHealthCheck < healthCheckInterval) {
+        continue;
+      }
+      await this.performHealthCheck(state);
+    }
+  }
+  async performHealthCheck(state) {
+    state.lastHealthCheckTime = Date.now();
+    try {
+      let healthCheckResult;
+      if (state.config.healthCheckFn) {
+        const testArgs = state.config.testArgs || [];
+        healthCheckResult = await state.config.healthCheckFn(...testArgs);
+      } else {
+        const testArgs = state.config.testArgs || [];
+        await state.config.resourceFn(...testArgs);
+        healthCheckResult = true;
+      }
+      if (healthCheckResult) {
+        state.isEnabled = true;
+        state.disableUntil = 0;
+        state.currentRetries = 0;
+        state.healthCheckFailureCount = 0;
+        state.lastError = void 0;
+      } else {
+        throw new Error("Health check function returned false");
+      }
+    } catch (error) {
+      state.healthCheckFailureCount++;
+      state.lastError = error;
+      if (state.healthCheckFailureCount >= state.config.maxHealthCheckFailures) {
+        state.isPermanentlyDisabled = true;
+        state.disableUntil = 0;
+      } else {
+        state.disableUntil = Date.now() + state.config.disableTime;
+      }
+    }
+  }
+}
+const resourceManager = new ResourceManager();
+async function registerResource(key, config, ...args) {
+  return resourceManager.register(key, config, ...args);
+}
+
 function keyCanBeParsed(key, parser) {
   return key in parser;
 }
@@ -59816,7 +60324,7 @@ class OneBotMsgApi {
         };
       }
     },
-    picElement: async (element, msg, elementWrapper) => {
+    picElement: async (element, msg, elementWrapper, { disableGetUrl }) => {
       try {
         const peer = {
           chatType: msg.chatType,
@@ -59836,7 +60344,7 @@ class OneBotMsgApi {
             summary: element.summary,
             file: element.fileName,
             sub_type: element.picSubType,
-            url: await this.core.apis.FileApi.getImageUrl(element),
+            url: disableGetUrl ? element.filePath ?? "" : await this.core.apis.FileApi.getImageUrl(element),
             file_size: element.fileSize
           }
         };
@@ -59845,7 +60353,7 @@ class OneBotMsgApi {
         return;
       }
     },
-    fileElement: async (element, msg, elementWrapper) => {
+    fileElement: async (element, msg, elementWrapper, { disableGetUrl }) => {
       const peer = {
         chatType: msg.chatType,
         peerUid: msg.peerUid,
@@ -59853,10 +60361,23 @@ class OneBotMsgApi {
       };
       FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid, element.fileUuid);
       FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid, element.fileName);
-      if (this.core.apis.PacketApi.packetStatus) {
+      if (this.core.apis.PacketApi.packetStatus && !disableGetUrl) {
         let url;
         try {
-          url = await this.core.apis.FileApi.getFileUrl(msg.chatType, msg.peerUid, element.fileUuid, element.file10MMd5);
+          url = await registerResource(
+            "file-url-get",
+            {
+              resourceFn: async () => {
+                return await this.core.apis.FileApi.getFileUrl(msg.chatType, msg.peerUid, element.fileUuid, element.file10MMd5, 1500);
+              },
+              healthCheckFn: async () => {
+                return await this.core.apis.PacketApi.pkt.operation.FetchRkey().then(() => true).catch(() => false);
+              },
+              testArgs: [],
+              healthCheckInterval: 3e4,
+              maxHealthCheckFailures: 3
+            }
+          );
         } catch (error) {
           url = "";
         }
@@ -59942,7 +60463,7 @@ class OneBotMsgApi {
         }
       };
     },
-    replyElement: async (element, msg) => {
+    replyElement: async (element, msg, _, quick_reply) => {
       const peer = {
         chatType: msg.chatType,
         peerUid: msg.peerUid,
@@ -59969,6 +60490,10 @@ class OneBotMsgApi {
             )).msgList;
             const replyMsg2 = msgRandom ? replyMsgList2.find((msg2) => msg2.msgRandom === msgRandom) : replyMsgList2.find((msg2) => msg2.msgSeq === msgSeq);
             if (replyMsg2) return replyMsg2;
+            if (quick_reply) {
+              this.core.context.logger.logWarn(`快速回复，跳过方法1查询，序号: ${msgSeq}, 消息数: ${replyMsgList2.length}`);
+              return void 0;
+            }
             this.core.context.logger.logWarn(`方法1查询失败，序号: ${msgSeq}, 消息数: ${replyMsgList2.length}`);
           }
           const replyMsgList = (await this.core.apis.MsgApi.getMsgsBySeqAndCount(
@@ -60018,7 +60543,7 @@ class OneBotMsgApi {
       }
       return null;
     },
-    videoElement: async (element, msg, elementWrapper) => {
+    videoElement: async (element, msg, elementWrapper, { disableGetUrl }) => {
       const peer = {
         chatType: msg.chatType,
         peerUid: msg.peerUid,
@@ -60055,10 +60580,23 @@ class OneBotMsgApi {
           videoDownUrl = videoDownUrlTemp.url;
         }
       }
-      if (!videoDownUrl) {
+      if (!videoDownUrl && !disableGetUrl) {
         if (this.core.apis.PacketApi.packetStatus) {
           try {
-            videoDownUrl = await this.core.apis.FileApi.getVideoUrlPacket(msg.peerUid, element.fileUuid);
+            videoDownUrl = await registerResource(
+              "video-url-get",
+              {
+                resourceFn: async () => {
+                  return await this.core.apis.FileApi.getVideoUrlPacket(msg.peerUid, element.fileUuid, 1500);
+                },
+                healthCheckFn: async () => {
+                  return await this.core.apis.PacketApi.pkt.operation.FetchRkey().then(() => true).catch(() => false);
+                },
+                testArgs: [],
+                healthCheckInterval: 3e4,
+                maxHealthCheckFailures: 3
+              }
+            );
           } catch (e) {
             this.core.context.logger.logError("获取视频url失败", e.stack);
             videoDownUrl = element.filePath;
@@ -60077,7 +60615,7 @@ class OneBotMsgApi {
         }
       };
     },
-    pttElement: async (element, msg, elementWrapper) => {
+    pttElement: async (element, msg, elementWrapper, { disableGetUrl }) => {
       const peer = {
         chatType: msg.chatType,
         peerUid: msg.peerUid,
@@ -60085,9 +60623,22 @@ class OneBotMsgApi {
       };
       const fileCode = FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, "", element.fileName);
       let pttUrl = "";
-      if (this.core.apis.PacketApi.packetStatus) {
+      if (this.core.apis.PacketApi.packetStatus && !disableGetUrl) {
         try {
-          pttUrl = await this.core.apis.FileApi.getPttUrl(msg.peerUid, element.fileUuid);
+          pttUrl = await registerResource(
+            "ptt-url-get",
+            {
+              resourceFn: async () => {
+                return await this.core.apis.FileApi.getPttUrl(msg.peerUid, element.fileUuid, 1500);
+              },
+              healthCheckFn: async () => {
+                return await this.core.apis.PacketApi.pkt.operation.FetchRkey().then(() => true).catch(() => false);
+              },
+              testArgs: [],
+              healthCheckInterval: 3e4,
+              maxHealthCheckFailures: 3
+            }
+          );
         } catch (e) {
           this.core.context.logger.logError("获取语音url失败", e.stack);
           pttUrl = element.filePath;
@@ -60499,13 +61050,13 @@ class OneBotMsgApi {
     }));
     return parsed.filter((item) => item !== void 0);
   }
-  async parseMessage(msg, messagePostFormat, parseMultMsg = true) {
+  async parseMessage(msg, messagePostFormat, parseMultMsg = true, disableGetUrl = false, quick_reply = false) {
     if (messagePostFormat === "string") {
-      return (await this.parseMessageV2(msg, parseMultMsg))?.stringMsg;
+      return (await this.parseMessageV2(msg, parseMultMsg, disableGetUrl, quick_reply))?.stringMsg;
     }
-    return (await this.parseMessageV2(msg, parseMultMsg))?.arrayMsg;
+    return (await this.parseMessageV2(msg, parseMultMsg, disableGetUrl, quick_reply))?.arrayMsg;
   }
-  async parseMessageV2(msg, parseMultMsg = true) {
+  async parseMessageV2(msg, parseMultMsg = true, disableGetUrl = false, quick_reply = false) {
     if (msg.senderUin == "0" || msg.senderUin == "") return;
     if (msg.peerUin == "0" || msg.peerUin == "") return;
     const resMsg = this.initializeMessage(msg);
@@ -60521,7 +61072,7 @@ class OneBotMsgApi {
     } else {
       return void 0;
     }
-    const validSegments = await this.parseMessageSegments(msg, parseMultMsg);
+    const validSegments = await this.parseMessageSegments(msg, parseMultMsg, disableGetUrl, quick_reply);
     resMsg.message = validSegments;
     resMsg.raw_message = validSegments.map((msg2) => encodeCQCode(msg2)).join("").trim();
     const stringMsg = await this.convertArrayToStringMessage(resMsg);
@@ -60553,6 +61104,7 @@ class OneBotMsgApi {
   async handleGroupMessage(resMsg, msg) {
     resMsg.sub_type = "normal";
     resMsg.group_id = parseInt(msg.peerUin);
+    resMsg.group_name = msg.peerName;
     let member = await this.core.apis.GroupApi.getGroupMember(msg.peerUin, msg.senderUin);
     if (!member) member = await this.core.apis.GroupApi.getGroupMember(msg.peerUin, msg.senderUin);
     if (member) {
@@ -60585,7 +61137,7 @@ class OneBotMsgApi {
       resMsg.sender.nickname = "临时会话";
     }
   }
-  async parseMessageSegments(msg, parseMultMsg) {
+  async parseMessageSegments(msg, parseMultMsg, disableGetUrl = false, quick_reply = false) {
     const msgSegments = await Promise.allSettled(msg.elements.map(
       async (element) => {
         for (const key in element) {
@@ -60595,7 +61147,7 @@ class OneBotMsgApi {
               element[key],
               msg,
               element,
-              { parseMultMsg }
+              { parseMultMsg, disableGetUrl, quick_reply }
             );
             if (key === "faceElement" && !parsedElement) {
               return null;
@@ -60716,11 +61268,11 @@ class OneBotMsgApi {
       if (!mixElementInner) throw new Error("element not found");
       let url = "";
       if (mixElement?.picElement && rawMessage) {
-        const tempData = await this.obContext.apis.MsgApi.rawToOb11Converters.picElement?.(mixElement?.picElement, rawMessage, mixElement, { parseMultMsg: false });
+        const tempData = await this.obContext.apis.MsgApi.rawToOb11Converters.picElement?.(mixElement?.picElement, rawMessage, mixElement, { parseMultMsg: false, disableGetUrl: false, quick_reply: false });
         url = tempData?.data.url ?? "";
       }
       if (mixElement?.videoElement && rawMessage) {
-        const tempData = await this.obContext.apis.MsgApi.rawToOb11Converters.videoElement?.(mixElement?.videoElement, rawMessage, mixElement, { parseMultMsg: false });
+        const tempData = await this.obContext.apis.MsgApi.rawToOb11Converters.videoElement?.(mixElement?.videoElement, rawMessage, mixElement, { parseMultMsg: false, disableGetUrl: false, quick_reply: false });
         url = tempData?.data.url ?? "";
       }
       return url !== "" ? url : await this.core.apis.FileApi.downloadMedia(msgId, peer.chatType, peer.peerUid, elementId, "", "");
@@ -61326,12 +61878,12 @@ class OneBotQuickActionApi {
   }
 }
 
-const SchemaData$1o = Type.Object({
+const SchemaData$1v = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetMsg extends OneBotAction {
   actionName = ActionName.GetMsg;
-  payloadSchema = SchemaData$1o;
+  payloadSchema = SchemaData$1v;
   async _handle(payload, _adapter, config) {
     if (!payload.message_id) {
       throw Error("参数message_id不能为空");
@@ -61342,13 +61894,8 @@ class GetMsg extends OneBotAction {
       throw new Error("消息不存在");
     }
     const peer = { guildId: "", peerUid: msgIdWithPeer?.Peer.peerUid, chatType: msgIdWithPeer.Peer.chatType };
-    const orimsg = this.obContext.recallMsgCache.get(msgIdWithPeer.MsgId);
     let msg;
-    if (orimsg) {
-      msg = orimsg;
-    } else {
-      msg = (await this.core.apis.MsgApi.getMsgsByMsgId(peer, [msgIdWithPeer?.MsgId || payload.message_id.toString()])).msgList[0];
-    }
+    msg = (await this.core.apis.MsgApi.getMsgsByMsgId(peer, [msgIdWithPeer?.MsgId || payload.message_id.toString()])).msgList[0];
     if (!msg) throw Error("消息不存在");
     const retMsg = await this.obContext.apis.MsgApi.parseMessage(msg, config.messagePostFormat);
     if (!retMsg) throw Error("消息为空");
@@ -61369,12 +61916,12 @@ class GetLoginInfo extends OneBotAction {
   }
 }
 
-const SchemaData$1n = Type.Object({
+const SchemaData$1u = Type.Object({
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetFriendList extends OneBotAction {
   actionName = ActionName.GetFriendList;
-  payloadSchema = SchemaData$1n;
+  payloadSchema = SchemaData$1u;
   async _handle(_payload) {
     const buddyMap = await this.core.apis.FriendApi.getBuddyV2SimpleInfoMap();
     const isNocache = typeof _payload.no_cache === "string" ? _payload.no_cache === "true" : !!_payload.no_cache;
@@ -61395,12 +61942,12 @@ class GetFriendList extends OneBotAction {
   }
 }
 
-const SchemaData$1m = Type.Object({
+const SchemaData$1t = Type.Object({
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetGroupList extends OneBotAction {
   actionName = ActionName.GetGroupList;
-  payloadSchema = SchemaData$1m;
+  payloadSchema = SchemaData$1t;
   async _handle(payload) {
     return OB11Construct.groups(
       await this.core.apis.GroupApi.getGroups(
@@ -61410,12 +61957,12 @@ class GetGroupList extends OneBotAction {
   }
 }
 
-const SchemaData$1l = Type.Object({
+const SchemaData$1s = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupInfo extends OneBotAction {
   actionName = ActionName.GetGroupInfo;
-  payloadSchema = SchemaData$1l;
+  payloadSchema = SchemaData$1s;
   async _handle(payload) {
     const group = (await this.core.apis.GroupApi.getGroups()).find((e) => e.groupCode == payload.group_id.toString());
     if (!group) {
@@ -61434,14 +61981,14 @@ class GetGroupInfo extends OneBotAction {
   }
 }
 
-const SchemaData$1k = Type.Object({
+const SchemaData$1r = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetGroupMemberInfo extends OneBotAction {
   actionName = ActionName.GetGroupMemberInfo;
-  payloadSchema = SchemaData$1k;
+  payloadSchema = SchemaData$1r;
   parseBoolean(value) {
     return typeof value === "string" ? value === "true" : value;
   }
@@ -61494,15 +62041,18 @@ class SendPrivateMsg extends SendMsgBase {
   }
 }
 
-const SchemaData$1j = Type.Object({
+const SchemaData$1q = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class DeleteMsg extends OneBotAction {
   actionName = ActionName.DeleteMsg;
-  payloadSchema = SchemaData$1j;
+  payloadSchema = SchemaData$1q;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(Number(payload.message_id));
     if (msg) {
+      this.obContext.recallEventCache.set(msg.MsgId, setTimeout(() => {
+        this.obContext.recallEventCache.delete(msg.MsgId);
+      }, 5e3));
       await this.core.apis.MsgApi.recallMsg(msg.Peer, msg.MsgId);
     } else {
       throw new Error("Recall failed");
@@ -61573,13 +62123,13 @@ class GoCQHTTPSendGroupForwardMsg extends GoCQHTTPSendForwardMsgBase {
   }
 }
 
-const SchemaData$1i = Type.Object({
+const SchemaData$1p = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()]),
   no_cache: Type.Union([Type.Boolean(), Type.String()], { default: false })
 });
 class GoCQHTTPGetStrangerInfo extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetStrangerInfo;
-  payloadSchema = SchemaData$1i;
+  payloadSchema = SchemaData$1p;
   async _handle(payload) {
     const user_id = payload.user_id.toString();
     const isNocache = typeof payload.no_cache === "string" ? payload.no_cache === "true" : !!payload.no_cache;
@@ -61613,13 +62163,13 @@ class GoCQHTTPGetStrangerInfo extends OneBotAction {
   }
 }
 
-const SchemaData$1h = Type.Object({
+const SchemaData$1o = Type.Object({
   times: Type.Union([Type.Number(), Type.String()], { default: 1 }),
   user_id: Type.Union([Type.Number(), Type.String()])
 });
 class SendLike extends OneBotAction {
   actionName = ActionName.SendLike;
-  payloadSchema = SchemaData$1h;
+  payloadSchema = SchemaData$1o;
   async _handle(payload) {
     const qq = payload.user_id.toString();
     const uid = await this.core.apis.UserApi.getUidByUinV2(qq) ?? "";
@@ -61631,7 +62181,7 @@ class SendLike extends OneBotAction {
   }
 }
 
-const SchemaData$1g = Type.Object({
+const SchemaData$1n = Type.Object({
   flag: Type.Union([Type.String(), Type.Number()]),
   approve: Type.Optional(Type.Union([Type.Boolean(), Type.String()])),
   reason: Type.Optional(Type.Union([Type.String({ default: " " }), Type.Null()])),
@@ -61639,7 +62189,7 @@ const SchemaData$1g = Type.Object({
 });
 class SetGroupAddRequest extends OneBotAction {
   actionName = ActionName.SetGroupAddRequest;
-  payloadSchema = SchemaData$1g;
+  payloadSchema = SchemaData$1n;
   async _handle(payload) {
     const flag = payload.flag.toString();
     const approve = payload.approve?.toString() !== "false";
@@ -61671,26 +62221,26 @@ class SetGroupAddRequest extends OneBotAction {
   }
 }
 
-const SchemaData$1f = Type.Object({
+const SchemaData$1m = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   is_dismiss: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupLeave extends OneBotAction {
   actionName = ActionName.SetGroupLeave;
-  payloadSchema = SchemaData$1f;
+  payloadSchema = SchemaData$1m;
   async _handle(payload) {
     await this.core.apis.GroupApi.quitGroup(payload.group_id.toString());
   }
 }
 
-const SchemaData$1e = Type.Object({
+const SchemaData$1l = Type.Object({
   flag: Type.Union([Type.String(), Type.Number()]),
   approve: Type.Optional(Type.Union([Type.String(), Type.Boolean()])),
   remark: Type.Optional(Type.String())
 });
 class SetFriendAddRequest extends OneBotAction {
   actionName = ActionName.SetFriendAddRequest;
-  payloadSchema = SchemaData$1e;
+  payloadSchema = SchemaData$1l;
   async _handle(payload) {
     const approve = payload.approve?.toString() !== "false";
     const notify = (await this.core.apis.FriendApi.getBuddyReq()).buddyReqs.find((e) => e.reqTime == payload.flag.toString());
@@ -61705,13 +62255,13 @@ class SetFriendAddRequest extends OneBotAction {
   }
 }
 
-const SchemaData$1d = Type.Object({
+const SchemaData$1k = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   enable: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupWholeBan extends OneBotAction {
   actionName = ActionName.SetGroupWholeBan;
-  payloadSchema = SchemaData$1d;
+  payloadSchema = SchemaData$1k;
   async _handle(payload) {
     const enable = payload.enable?.toString() !== "false";
     let res = await this.core.apis.GroupApi.banGroup(payload.group_id.toString(), enable);
@@ -61722,13 +62272,13 @@ class SetGroupWholeBan extends OneBotAction {
   }
 }
 
-const SchemaData$1c = Type.Object({
+const SchemaData$1j = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   group_name: Type.String()
 });
 class SetGroupName extends OneBotAction {
   actionName = ActionName.SetGroupName;
-  payloadSchema = SchemaData$1c;
+  payloadSchema = SchemaData$1j;
   async _handle(payload) {
     const ret = await this.core.apis.GroupApi.setGroupName(payload.group_id.toString(), payload.group_name);
     if (ret.result !== 0) {
@@ -61738,14 +62288,14 @@ class SetGroupName extends OneBotAction {
   }
 }
 
-const SchemaData$1b = Type.Object({
+const SchemaData$1i = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   duration: Type.Union([Type.Number(), Type.String()], { default: 0 })
 });
 class SetGroupBan extends OneBotAction {
   actionName = ActionName.SetGroupBan;
-  payloadSchema = SchemaData$1b;
+  payloadSchema = SchemaData$1i;
   async _handle(payload) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error("uid error");
@@ -61760,14 +62310,14 @@ class SetGroupBan extends OneBotAction {
   }
 }
 
-const SchemaData$1a = Type.Object({
+const SchemaData$1h = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   reject_add_request: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupKick extends OneBotAction {
   actionName = ActionName.SetGroupKick;
-  payloadSchema = SchemaData$1a;
+  payloadSchema = SchemaData$1h;
   async _handle(payload) {
     const rejectReq = payload.reject_add_request?.toString() == "true";
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -61777,14 +62327,14 @@ class SetGroupKick extends OneBotAction {
   }
 }
 
-const SchemaData$19 = Type.Object({
+const SchemaData$1g = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   enable: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupAdmin extends OneBotAction {
   actionName = ActionName.SetGroupAdmin;
-  payloadSchema = SchemaData$19;
+  payloadSchema = SchemaData$1g;
   async _handle(payload) {
     const enable = typeof payload.enable === "string" ? payload.enable === "true" : !!payload.enable;
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -61794,14 +62344,14 @@ class SetGroupAdmin extends OneBotAction {
   }
 }
 
-const SchemaData$18 = Type.Object({
+const SchemaData$1f = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   card: Type.Optional(Type.String())
 });
 class SetGroupCard extends OneBotAction {
   actionName = ActionName.SetGroupCard;
-  payloadSchema = SchemaData$18;
+  payloadSchema = SchemaData$1f;
   async _handle(payload) {
     const member = await this.core.apis.GroupApi.getGroupMember(payload.group_id.toString(), payload.user_id.toString());
     if (member) await this.core.apis.GroupApi.setMemberCard(payload.group_id.toString(), member.uid, payload.card || "");
@@ -61943,7 +62493,7 @@ class GetRecord extends GetFileBase {
   }
 }
 
-const SchemaData$17 = Type.Object({
+const SchemaData$1e = Type.Object({
   user_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
   group_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
   message_id: Type.Optional(Type.Union([Type.String(), Type.Number()]))
@@ -61982,11 +62532,11 @@ class MarkMsgAsRead extends OneBotAction {
   }
 }
 class MarkPrivateMsgAsRead extends MarkMsgAsRead {
-  payloadSchema = SchemaData$17;
+  payloadSchema = SchemaData$1e;
   actionName = ActionName.MarkPrivateMsgAsRead;
 }
 class MarkGroupMsgAsRead extends MarkMsgAsRead {
-  payloadSchema = SchemaData$17;
+  payloadSchema = SchemaData$1e;
   actionName = ActionName.MarkGroupMsgAsRead;
 }
 class GoCQHTTPMarkMsgAsRead extends MarkMsgAsRead {
@@ -62000,7 +62550,7 @@ class MarkAllMsgAsRead extends OneBotAction {
   }
 }
 
-const SchemaData$16 = Type.Object({
+const SchemaData$1d = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file: Type.String(),
   name: Type.String(),
@@ -62010,7 +62560,7 @@ const SchemaData$16 = Type.Object({
 });
 class GoCQHTTPUploadGroupFile extends OneBotAction {
   actionName = ActionName.GoCQHTTP_UploadGroupFile;
-  payloadSchema = SchemaData$16;
+  payloadSchema = SchemaData$1d;
   async _handle(payload) {
     let file = payload.file;
     if (fs__default.existsSync(file)) {
@@ -62035,12 +62585,12 @@ class GoCQHTTPUploadGroupFile extends OneBotAction {
   }
 }
 
-const SchemaData$15 = Type.Object({
+const SchemaData$1c = Type.Object({
   file: Type.String()
 });
 class SetAvatar extends OneBotAction {
   actionName = ActionName.SetQQAvatar;
-  payloadSchema = SchemaData$15;
+  payloadSchema = SchemaData$1c;
   async _handle(payload) {
     const { path, success } = await uriToLocalFile(this.core.NapCatTempPath, payload.file);
     if (!success) {
@@ -62068,7 +62618,7 @@ class SetAvatar extends OneBotAction {
   }
 }
 
-const SchemaData$14 = Type.Object({
+const SchemaData$1b = Type.Object({
   url: Type.Optional(Type.String()),
   base64: Type.Optional(Type.String()),
   name: Type.Optional(Type.String()),
@@ -62076,7 +62626,7 @@ const SchemaData$14 = Type.Object({
 });
 class GoCQHTTPDownloadFile extends OneBotAction {
   actionName = ActionName.GoCQHTTP_DownloadFile;
-  payloadSchema = SchemaData$14;
+  payloadSchema = SchemaData$1b;
   async _handle(payload) {
     const isRandomName = !payload.name;
     const name = payload.name || randomUUID();
@@ -62128,15 +62678,18 @@ class GoCQHTTPDownloadFile extends OneBotAction {
   }
 }
 
-const SchemaData$13 = Type.Object({
+const SchemaData$1a = Type.Object({
   group_id: Type.String(),
   message_seq: Type.Optional(Type.String()),
   count: Type.Number({ default: 20 }),
-  reverseOrder: Type.Boolean({ default: false })
+  reverseOrder: Type.Boolean({ default: false }),
+  disable_get_url: Type.Boolean({ default: false }),
+  parse_mult_msg: Type.Boolean({ default: true }),
+  quick_reply: Type.Boolean({ default: false })
 });
 class GoCQHTTPGetGroupMsgHistory extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupMsgHistory;
-  payloadSchema = SchemaData$13;
+  payloadSchema = SchemaData$1a;
   async _handle(payload, _adapter, config) {
     const peer = { chatType: ChatType.KCHATTYPEGROUP, peerUid: payload.group_id.toString() };
     const hasMessageSeq = !payload.message_seq ? !!payload.message_seq : !(payload.message_seq?.toString() === "" || payload.message_seq?.toString() === "0");
@@ -62147,19 +62700,19 @@ class GoCQHTTPGetGroupMsgHistory extends OneBotAction {
       msg.id = MessageUnique.createUniqueMsgId({ guildId: "", chatType: msg.chatType, peerUid: msg.peerUid }, msg.msgId);
     }));
     const ob11MsgList = (await Promise.all(
-      msgList.map((msg) => this.obContext.apis.MsgApi.parseMessage(msg, config.messagePostFormat))
+      msgList.map((msg) => this.obContext.apis.MsgApi.parseMessage(msg, config.messagePostFormat, payload.parse_mult_msg, payload.disable_get_url, payload.quick_reply))
     )).filter((msg) => msg !== void 0);
     return { "messages": ob11MsgList };
   }
 }
 
-const SchemaData$12 = Type.Object({
+const SchemaData$19 = Type.Object({
   message_id: Type.Optional(Type.String()),
   id: Type.Optional(Type.String())
 });
 class GoCQHTTPGetForwardMsgAction extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetForwardMsg;
-  payloadSchema = SchemaData$12;
+  payloadSchema = SchemaData$19;
   createTemplateNode(message) {
     return {
       type: OB11MessageDataType.node,
@@ -62267,15 +62820,18 @@ class GoCQHTTPGetForwardMsgAction extends OneBotAction {
   }
 }
 
-const SchemaData$11 = Type.Object({
+const SchemaData$18 = Type.Object({
   user_id: Type.String(),
   message_seq: Type.Optional(Type.String()),
   count: Type.Number({ default: 20 }),
-  reverseOrder: Type.Boolean({ default: false })
+  reverseOrder: Type.Boolean({ default: false }),
+  disable_get_url: Type.Boolean({ default: false }),
+  parse_mult_msg: Type.Boolean({ default: true }),
+  quick_reply: Type.Boolean({ default: false })
 });
 class GetFriendMsgHistory extends OneBotAction {
   actionName = ActionName.GetFriendMsgHistory;
-  payloadSchema = SchemaData$11;
+  payloadSchema = SchemaData$18;
   async _handle(payload, _adapter, config) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error(`记录${payload.user_id}不存在`);
@@ -62289,18 +62845,18 @@ class GetFriendMsgHistory extends OneBotAction {
       msg.id = MessageUnique.createUniqueMsgId({ guildId: "", chatType: msg.chatType, peerUid: msg.peerUid }, msg.msgId);
     }));
     const ob11MsgList = (await Promise.all(
-      msgList.map((msg) => this.obContext.apis.MsgApi.parseMessage(msg, config.messagePostFormat))
+      msgList.map((msg) => this.obContext.apis.MsgApi.parseMessage(msg, config.messagePostFormat, payload.parse_mult_msg, payload.disable_get_url))
     )).filter((msg) => msg !== void 0);
     return { "messages": ob11MsgList };
   }
 }
 
-const SchemaData$10 = Type.Object({
+const SchemaData$17 = Type.Object({
   domain: Type.String()
 });
 class GetCookies extends OneBotAction {
   actionName = ActionName.GetCookies;
-  payloadSchema = SchemaData$10;
+  payloadSchema = SchemaData$17;
   async _handle(payload) {
     const cookiesObject = await this.core.apis.UserApi.getCookies(payload.domain);
     const cookies = Object.entries(cookiesObject).map(([key, value]) => `${key}=${value}`).join("; ");
@@ -62309,14 +62865,14 @@ class GetCookies extends OneBotAction {
   }
 }
 
-const SchemaData$$ = Type.Object({
+const SchemaData$16 = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()]),
   emoji_id: Type.Union([Type.Number(), Type.String()]),
   set: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetMsgEmojiLike extends OneBotAction {
   actionName = ActionName.SetMsgEmojiLike;
-  payloadSchema = SchemaData$$;
+  payloadSchema = SchemaData$16;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msg) {
@@ -62346,14 +62902,14 @@ class GetRobotUinRange extends OneBotAction {
   }
 }
 
-const SchemaData$_ = Type.Object({
+const SchemaData$15 = Type.Object({
   status: Type.Union([Type.Number(), Type.String()]),
   ext_status: Type.Union([Type.Number(), Type.String()]),
   battery_status: Type.Union([Type.Number(), Type.String()])
 });
 class SetOnlineStatus extends OneBotAction {
   actionName = ActionName.SetOnlineStatus;
-  payloadSchema = SchemaData$_;
+  payloadSchema = SchemaData$15;
   async _handle(payload) {
     const ret = await this.core.apis.UserApi.setSelfOnlineStatus(
       +payload.status,
@@ -62367,12 +62923,12 @@ class SetOnlineStatus extends OneBotAction {
   }
 }
 
-const SchemaData$Z = Type.Object({
+const SchemaData$14 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupNotice extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupNotice;
-  payloadSchema = SchemaData$Z;
+  payloadSchema = SchemaData$14;
   async _handle(payload) {
     const group = payload.group_id.toString();
     const ret = await this.core.apis.WebApi.getGroupNotice(group);
@@ -62404,12 +62960,12 @@ class GetGroupNotice extends OneBotAction {
   }
 }
 
-const SchemaData$Y = Type.Object({
+const SchemaData$13 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupEssence extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetEssenceMsg;
-  payloadSchema = SchemaData$Y;
+  payloadSchema = SchemaData$13;
   async msgSeqToMsgId(peer, msgSeq, msgRandom) {
     const replyMsgList = (await this.core.apis.MsgApi.getMsgsBySeqAndCount(peer, msgSeq, 1, true, true)).msgList.find((msg) => msg.msgSeq === msgSeq && msg.msgRandom === msgRandom);
     if (!replyMsgList) {
@@ -62487,7 +63043,7 @@ class GetGroupEssence extends OneBotAction {
   }
 }
 
-const SchemaData$X = Type.Object({
+const SchemaData$12 = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()]),
   group_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   user_id: Type.Optional(Type.Union([Type.Number(), Type.String()]))
@@ -62521,11 +63077,11 @@ class ForwardSingleMsg extends OneBotAction {
   }
 }
 class ForwardFriendSingleMsg extends ForwardSingleMsg {
-  payloadSchema = SchemaData$X;
+  payloadSchema = SchemaData$12;
   actionName = ActionName.ForwardFriendSingleMsg;
 }
 class ForwardGroupSingleMsg extends ForwardSingleMsg {
-  payloadSchema = SchemaData$X;
+  payloadSchema = SchemaData$12;
   actionName = ActionName.ForwardGroupSingleMsg;
 }
 
@@ -62539,7 +63095,7 @@ class GetFriendWithCategory extends OneBotAction {
   }
 }
 
-const SchemaData$W = Type.Object({
+const SchemaData$11 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   content: Type.String(),
   image: Type.Optional(Type.String()),
@@ -62551,7 +63107,7 @@ const SchemaData$W = Type.Object({
 });
 class SendGroupNotice extends OneBotAction {
   actionName = ActionName.GoCQHTTP_SendGroupNotice;
-  payloadSchema = SchemaData$W;
+  payloadSchema = SchemaData$11;
   async _handle(payload) {
     let UploadImage = void 0;
     if (payload.image) {
@@ -62593,13 +63149,13 @@ class SendGroupNotice extends OneBotAction {
   }
 }
 
-const SchemaData$V = Type.Object({
+const SchemaData$10 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   type: Type.Optional(Type.Enum(WebHonorType))
 });
 class GetGroupHonorInfo extends OneBotAction {
   actionName = ActionName.GetGroupHonorInfo;
-  payloadSchema = SchemaData$V;
+  payloadSchema = SchemaData$10;
   async _handle(payload) {
     if (!payload.type) {
       payload.type = WebHonorType.ALL;
@@ -62656,11 +63212,11 @@ class GetOnlineClient extends OneBotAction {
   }
 }
 
-const SchemaData$U = Type.Object({
+const SchemaData$$ = Type.Object({
   image: Type.String()
 });
 class OCRImageBase extends OneBotAction {
-  payloadSchema = SchemaData$U;
+  payloadSchema = SchemaData$$;
   async _handle(payload) {
     const { path, success } = await uriToLocalFile(this.core.NapCatTempPath, payload.image);
     if (!success) {
@@ -62689,12 +63245,12 @@ class IOCRImage extends OCRImageBase {
   actionName = ActionName.IOCRImage;
 }
 
-const SchemaData$T = Type.Object({
+const SchemaData$_ = Type.Object({
   words: Type.Array(Type.String())
 });
 class TranslateEnWordToZn extends OneBotAction {
   actionName = ActionName.TranslateEnWordToZn;
-  payloadSchema = SchemaData$T;
+  payloadSchema = SchemaData$_;
   async _handle(payload) {
     const ret = await this.core.apis.SystemApi.translateEnWordToZn(payload.words);
     if (ret.result !== 0) {
@@ -62704,7 +63260,7 @@ class TranslateEnWordToZn extends OneBotAction {
   }
 }
 
-const SchemaData$S = Type.Object({
+const SchemaData$Z = Type.Object({
   nickname: Type.String(),
   personal_note: Type.Optional(Type.String()),
   sex: Type.Optional(Type.Union([Type.Number(), Type.String()]))
@@ -62712,7 +63268,7 @@ const SchemaData$S = Type.Object({
 });
 class SetQQProfile extends OneBotAction {
   actionName = ActionName.SetQQProfile;
-  payloadSchema = SchemaData$S;
+  payloadSchema = SchemaData$Z;
   async _handle(payload) {
     const self = this.core.selfInfo;
     const OldProfile = await this.core.apis.UserApi.getUserDetailInfo(self.uid);
@@ -62730,14 +63286,14 @@ class SetQQProfile extends OneBotAction {
   }
 }
 
-const SchemaData$R = Type.Object({
+const SchemaData$Y = Type.Object({
   user_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   group_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   phoneNumber: Type.String({ default: "" })
 });
 class SharePeer extends OneBotAction {
   actionName = ActionName.SharePeer;
-  payloadSchema = SchemaData$R;
+  payloadSchema = SchemaData$Y;
   async _handle(payload) {
     if (payload.group_id) {
       return await this.core.apis.GroupApi.getGroupRecommendContactArkJson(payload.group_id.toString());
@@ -62758,13 +63314,13 @@ class ShareGroupEx extends OneBotAction {
   }
 }
 
-const SchemaData$Q = Type.Object({
+const SchemaData$X = Type.Object({
   rawData: Type.String(),
   brief: Type.String()
 });
 class CreateCollection extends OneBotAction {
   actionName = ActionName.CreateCollection;
-  payloadSchema = SchemaData$Q;
+  payloadSchema = SchemaData$X;
   async _handle(payload) {
     return await this.core.apis.CollectionApi.createCollection(
       this.core.selfInfo.uin,
@@ -62776,23 +63332,23 @@ class CreateCollection extends OneBotAction {
   }
 }
 
-const SchemaData$P = Type.Object({
+const SchemaData$W = Type.Object({
   longNick: Type.String()
 });
 class SetLongNick extends OneBotAction {
   actionName = ActionName.SetLongNick;
-  payloadSchema = SchemaData$P;
+  payloadSchema = SchemaData$W;
   async _handle(payload) {
     return await this.core.apis.UserApi.setLongNick(payload.longNick);
   }
 }
 
-const SchemaData$O = Type.Object({
+const SchemaData$V = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class DelEssenceMsg extends OneBotAction {
   actionName = ActionName.DelEssenceMsg;
-  payloadSchema = SchemaData$O;
+  payloadSchema = SchemaData$V;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msg) {
@@ -62808,12 +63364,12 @@ class DelEssenceMsg extends OneBotAction {
   }
 }
 
-const SchemaData$N = Type.Object({
+const SchemaData$U = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()])
 });
 class SetEssenceMsg extends OneBotAction {
   actionName = ActionName.SetEssenceMsg;
-  payloadSchema = SchemaData$N;
+  payloadSchema = SchemaData$U;
   async _handle(payload) {
     const msg = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msg) {
@@ -62826,12 +63382,12 @@ class SetEssenceMsg extends OneBotAction {
   }
 }
 
-const SchemaData$M = Type.Object({
+const SchemaData$T = Type.Object({
   count: Type.Union([Type.Number(), Type.String()], { default: 10 })
 });
 class GetRecentContact extends OneBotAction {
   actionName = ActionName.GetRecentContact;
-  payloadSchema = SchemaData$M;
+  payloadSchema = SchemaData$T;
   async _handle(payload, _adapter, config) {
     const ret = await this.core.apis.UserApi.getRecentContactListSnapShot(+payload.count);
     return await Promise.all(ret.info.changedList.map(async (t) => {
@@ -62864,14 +63420,14 @@ class GetRecentContact extends OneBotAction {
   }
 }
 
-const SchemaData$L = Type.Object({
+const SchemaData$S = Type.Object({
   user_id: Type.Optional(Type.Union([Type.Number(), Type.String()])),
   start: Type.Union([Type.Number(), Type.String()], { default: 0 }),
   count: Type.Union([Type.Number(), Type.String()], { default: 10 })
 });
 class GetProfileLike extends OneBotAction {
   actionName = ActionName.GetProfileLike;
-  payloadSchema = SchemaData$L;
+  payloadSchema = SchemaData$S;
   async _handle(payload) {
     const isSelf = this.core.selfInfo.uin === payload.user_id || !payload.user_id;
     const userUid = isSelf || !payload.user_id ? this.core.selfInfo.uid : await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -62891,13 +63447,13 @@ class GetProfileLike extends OneBotAction {
   }
 }
 
-const SchemaData$K = Type.Object({
+const SchemaData$R = Type.Object({
   file: Type.String(),
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class SetGroupPortrait extends OneBotAction {
   actionName = ActionName.SetGroupPortrait;
-  payloadSchema = SchemaData$K;
+  payloadSchema = SchemaData$R;
   async _handle(payload) {
     const { path, success } = await uriToLocalFile(this.core.NapCatTempPath, payload.file);
     if (!success) {
@@ -62925,26 +63481,26 @@ class SetGroupPortrait extends OneBotAction {
   }
 }
 
-const SchemaData$J = Type.Object({
+const SchemaData$Q = Type.Object({
   count: Type.Union([Type.Number(), Type.String()], { default: 48 })
 });
 class FetchCustomFace extends OneBotAction {
   actionName = ActionName.FetchCustomFace;
-  payloadSchema = SchemaData$J;
+  payloadSchema = SchemaData$Q;
   async _handle(payload) {
     const ret = await this.core.apis.MsgApi.fetchFavEmojiList(+payload.count);
     return ret.emojiInfoList.map((e) => e.url);
   }
 }
 
-const SchemaData$I = Type.Object({
+const SchemaData$P = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()]),
   file: Type.String(),
   name: Type.String()
 });
 class GoCQHTTPUploadPrivateFile extends OneBotAction {
   actionName = ActionName.GOCQHTTP_UploadPrivateFile;
-  payloadSchema = SchemaData$I;
+  payloadSchema = SchemaData$P;
   async getPeer(payload) {
     if (payload.user_id) {
       const peerUid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
@@ -62978,7 +63534,7 @@ class GoCQHTTPUploadPrivateFile extends OneBotAction {
   }
 }
 
-const SchemaData$H = Type.Object({
+const SchemaData$O = Type.Object({
   message_id: Type.Union([Type.Number(), Type.String()]),
   emojiId: Type.Union([Type.Number(), Type.String()]),
   emojiType: Type.Union([Type.Number(), Type.String()]),
@@ -62986,7 +63542,7 @@ const SchemaData$H = Type.Object({
 });
 class FetchEmojiLike extends OneBotAction {
   actionName = ActionName.FetchEmojiLike;
-  payloadSchema = SchemaData$H;
+  payloadSchema = SchemaData$O;
   async _handle(payload) {
     const msgIdPeer = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id);
     if (!msgIdPeer) throw new Error("消息不存在");
@@ -63002,13 +63558,13 @@ class FetchEmojiLike extends OneBotAction {
   }
 }
 
-const SchemaData$G = Type.Object({
+const SchemaData$N = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()]),
   event_type: Type.Number()
 });
 class SetInputStatus extends OneBotAction {
   actionName = ActionName.SetInputStatus;
-  payloadSchema = SchemaData$G;
+  payloadSchema = SchemaData$N;
   async _handle(payload) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error("uid is empty");
@@ -63033,13 +63589,13 @@ class GetCSRF extends OneBotAction {
   }
 }
 
-const SchemaData$F = Type.Object({
+const SchemaData$M = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   notice_id: Type.String()
 });
 class DelGroupNotice extends OneBotAction {
   actionName = ActionName.DelGroupNotice;
-  payloadSchema = SchemaData$F;
+  payloadSchema = SchemaData$M;
   async _handle(payload) {
     const group = payload.group_id.toString();
     const noticeId = payload.notice_id;
@@ -63047,24 +63603,24 @@ class DelGroupNotice extends OneBotAction {
   }
 }
 
-const SchemaData$E = Type.Object({
+const SchemaData$L = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupInfoEx extends OneBotAction {
   actionName = ActionName.GetGroupInfoEx;
-  payloadSchema = SchemaData$E;
+  payloadSchema = SchemaData$L;
   async _handle(payload) {
     return (await this.core.apis.GroupApi.getGroupExtFE0Info([payload.group_id.toString()])).result.groupExtInfos.get(payload.group_id.toString());
   }
 }
 
-const SchemaData$D = Type.Object({
+const SchemaData$K = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_id: Type.String()
 });
 class DeleteGroupFile extends OneBotAction {
   actionName = ActionName.GOCQHTTP_DeleteGroupFile;
-  payloadSchema = SchemaData$D;
+  payloadSchema = SchemaData$K;
   async _handle(payload) {
     const data = FileNapCatOneBotUUID.decodeModelId(payload.file_id);
     if (!data || !data.fileId) throw new Error("Invalid file_id");
@@ -63072,7 +63628,7 @@ class DeleteGroupFile extends OneBotAction {
   }
 }
 
-const SchemaData$C = Type.Object({
+const SchemaData$J = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   // 兼容gocq 与name二选一
   folder_name: Type.Optional(Type.String()),
@@ -63081,21 +63637,21 @@ const SchemaData$C = Type.Object({
 });
 class CreateGroupFileFolder extends OneBotAction {
   actionName = ActionName.GoCQHTTP_CreateGroupFileFolder;
-  payloadSchema = SchemaData$C;
+  payloadSchema = SchemaData$J;
   async _handle(payload) {
     const folderName = payload.folder_name || payload.name;
     return (await this.core.apis.GroupApi.creatGroupFileFolder(payload.group_id.toString(), folderName)).resultWithGroupItem;
   }
 }
 
-const SchemaData$B = Type.Object({
+const SchemaData$I = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   folder_id: Type.Optional(Type.String()),
   folder: Type.Optional(Type.String())
 });
 class DeleteGroupFileFolder extends OneBotAction {
   actionName = ActionName.GoCQHTTP_DeleteGroupFileFolder;
-  payloadSchema = SchemaData$B;
+  payloadSchema = SchemaData$I;
   async _handle(payload) {
     return (await this.core.apis.GroupApi.delGroupFileFolder(
       payload.group_id.toString(),
@@ -63104,12 +63660,12 @@ class DeleteGroupFileFolder extends OneBotAction {
   }
 }
 
-const SchemaData$A = Type.Object({
+const SchemaData$H = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupFileSystemInfo extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupFileSystemInfo;
-  payloadSchema = SchemaData$A;
+  payloadSchema = SchemaData$H;
   async _handle(payload) {
     const groupFileCount = (await this.core.apis.GroupApi.getGroupFileCount([payload.group_id.toString()])).groupFileCounts[0];
     if (!groupFileCount) {
@@ -63124,13 +63680,13 @@ class GetGroupFileSystemInfo extends OneBotAction {
   }
 }
 
-const SchemaData$z = Type.Object({
+const SchemaData$G = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_count: Type.Union([Type.Number(), Type.String()], { default: 50 })
 });
 class GetGroupRootFiles extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupRootFiles;
-  payloadSchema = SchemaData$z;
+  payloadSchema = SchemaData$G;
   async _handle(payload) {
     const ret = await this.core.apis.MsgApi.getGroupFileList(payload.group_id.toString(), {
       sortType: 1,
@@ -63146,7 +63702,7 @@ class GetGroupRootFiles extends OneBotAction {
   }
 }
 
-const SchemaData$y = Type.Object({
+const SchemaData$F = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   folder_id: Type.Optional(Type.String()),
   folder: Type.Optional(Type.String()),
@@ -63154,7 +63710,7 @@ const SchemaData$y = Type.Object({
 });
 class GetGroupFilesByFolder extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupFilesByFolder;
-  payloadSchema = SchemaData$y;
+  payloadSchema = SchemaData$F;
   async _handle(payload) {
     const ret = await this.core.apis.MsgApi.getGroupFileList(payload.group_id.toString(), {
       sortType: 1,
@@ -63171,12 +63727,12 @@ class GetGroupFilesByFolder extends OneBotAction {
   }
 }
 
-const SchemaData$x = Type.Object({
+const SchemaData$E = Type.Object({
   count: Type.Union([Type.Number(), Type.String()], { default: 50 })
 });
 class GetGroupSystemMsg extends OneBotAction {
   actionName = ActionName.GetGroupSystemMsg;
-  payloadSchema = SchemaData$x;
+  payloadSchema = SchemaData$E;
   async _handle(params) {
     const SingleScreenNotifies = await this.core.apis.GroupApi.getSingleScreenNotifies(false, +params.count);
     const retData = { invited_requests: [], InvitedRequest: [], join_requests: [] };
@@ -63224,12 +63780,12 @@ class GetPacketStatus extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$w = Type.Object({
+const SchemaData$D = Type.Object({
   user_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetUserStatus extends GetPacketStatusDepends {
   actionName = ActionName.GetUserStatus;
-  payloadSchema = SchemaData$w;
+  payloadSchema = SchemaData$D;
   async _handle(payload) {
     return await this.core.apis.PacketApi.pkt.operation.GetStrangerStatus(+payload.user_id);
   }
@@ -63242,14 +63798,14 @@ class GetRkey extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$v = Type.Object({
+const SchemaData$C = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   user_id: Type.Union([Type.Number(), Type.String()]),
   special_title: Type.String({ default: "" })
 });
 class SetSpecialTitle extends GetPacketStatusDepends {
   actionName = ActionName.SetSpecialTitle;
-  payloadSchema = SchemaData$v;
+  payloadSchema = SchemaData$C;
   async _handle(payload) {
     const uid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id.toString());
     if (!uid) throw new Error("User not found");
@@ -63257,24 +63813,24 @@ class SetSpecialTitle extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$u = Type.Object({
+const SchemaData$B = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupShutList extends OneBotAction {
   actionName = ActionName.GetGroupShutList;
-  payloadSchema = SchemaData$u;
+  payloadSchema = SchemaData$B;
   async _handle(payload) {
     return await this.core.apis.GroupApi.getGroupShutUpMemberList(payload.group_id.toString());
   }
 }
 
-const SchemaData$t = Type.Object({
+const SchemaData$A = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   no_cache: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class GetGroupMemberList extends OneBotAction {
   actionName = ActionName.GetGroupMemberList;
-  payloadSchema = SchemaData$t;
+  payloadSchema = SchemaData$A;
   async _handle(payload) {
     const groupIdStr = payload.group_id.toString();
     const noCache = this.parseBoolean(payload.no_cache ?? false);
@@ -63303,13 +63859,13 @@ class GetGroupMemberList extends OneBotAction {
   }
 }
 
-const SchemaData$s = Type.Object({
+const SchemaData$z = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_id: Type.String()
 });
 class GetGroupFileUrl extends GetPacketStatusDepends {
   actionName = ActionName.GOCQHTTP_GetGroupFileUrl;
-  payloadSchema = SchemaData$s;
+  payloadSchema = SchemaData$z;
   async _handle(payload) {
     const contextMsgFile = FileNapCatOneBotUUID.decode(payload.file_id) || FileNapCatOneBotUUID.decodeModelId(payload.file_id);
     if (contextMsgFile?.fileUUID) {
@@ -63321,12 +63877,12 @@ class GetGroupFileUrl extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$r = Type.Object({
+const SchemaData$y = Type.Object({
   domain: Type.String()
 });
 class GetCredentials extends OneBotAction {
   actionName = ActionName.GetCredentials;
-  payloadSchema = SchemaData$r;
+  payloadSchema = SchemaData$y;
   async _handle(payload) {
     const cookiesObject = await this.core.apis.UserApi.getCookies(payload.domain);
     const cookies = Object.entries(cookiesObject).map(([key, value]) => `${key}=${value}`).join("; ");
@@ -63335,11 +63891,11 @@ class GetCredentials extends OneBotAction {
   }
 }
 
-const SchemaData$q = Type.Object({
+const SchemaData$x = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class SetGroupSignBase extends GetPacketStatusDepends {
-  payloadSchema = SchemaData$q;
+  payloadSchema = SchemaData$x;
   async _handle(payload) {
     return await this.core.apis.PacketApi.pkt.operation.GroupSign(+payload.group_id);
   }
@@ -63351,12 +63907,12 @@ class SendGroupSign extends SetGroupSignBase {
   actionName = ActionName.SendGroupSign;
 }
 
-const SchemaData$p = Type.Object({
+const SchemaData$w = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GoCQHTTPGetGroupAtAllRemain extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetGroupAtAllRemain;
-  payloadSchema = SchemaData$p;
+  payloadSchema = SchemaData$w;
   async _handle(payload) {
     const ret = await this.core.apis.GroupApi.getGroupRemainAtTimes(payload.group_id.toString());
     const data = {
@@ -63368,23 +63924,23 @@ class GoCQHTTPGetGroupAtAllRemain extends OneBotAction {
   }
 }
 
-const SchemaData$o = Type.Object({
+const SchemaData$v = Type.Object({
   url: Type.String()
 });
 class GoCQHTTPCheckUrlSafely extends OneBotAction {
   actionName = ActionName.GoCQHTTP_CheckUrlSafely;
-  payloadSchema = SchemaData$o;
+  payloadSchema = SchemaData$v;
   async _handle() {
     return { level: 1 };
   }
 }
 
-const SchemaData$n = Type.Object({
+const SchemaData$u = Type.Object({
   model: Type.Optional(Type.String())
 });
 class GoCQHTTPGetModelShow extends OneBotAction {
   actionName = ActionName.GoCQHTTP_GetModelShow;
-  payloadSchema = SchemaData$n;
+  payloadSchema = SchemaData$u;
   async _handle(payload) {
     if (!payload.model) {
       payload.model = "napcat";
@@ -63405,7 +63961,7 @@ class GoCQHTTPSetModelShow extends OneBotAction {
   }
 }
 
-const SchemaData$m = Type.Object({
+const SchemaData$t = Type.Object({
   friend_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
   user_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
   temp_block: Type.Optional(Type.Boolean()),
@@ -63413,7 +63969,7 @@ const SchemaData$m = Type.Object({
 });
 class GoCQHTTPDeleteFriend extends OneBotAction {
   actionName = ActionName.GoCQHTTP_DeleteFriend;
-  payloadSchema = SchemaData$m;
+  payloadSchema = SchemaData$t;
   async _handle(payload) {
     const uin = payload.friend_id ?? payload.user_id ?? "";
     const uid = await this.core.apis.UserApi.getUidByUinV2(uin.toString());
@@ -63511,7 +64067,7 @@ class MiniAppInfoHelper {
   }
 }
 
-const SchemaData$l = Type.Union([
+const SchemaData$s = Type.Union([
   Type.Object({
     type: Type.Union([Type.Literal("bili"), Type.Literal("weibo")]),
     title: Type.String(),
@@ -63542,7 +64098,7 @@ const SchemaData$l = Type.Union([
 ]);
 class GetMiniAppArk extends GetPacketStatusDepends {
   actionName = ActionName.GetMiniAppArk;
-  payloadSchema = SchemaData$l;
+  payloadSchema = SchemaData$s;
   async _handle(payload) {
     let reqParam;
     const customParams = {
@@ -63586,14 +64142,14 @@ var AIVoiceChatType = /* @__PURE__ */ ((AIVoiceChatType2) => {
   return AIVoiceChatType2;
 })(AIVoiceChatType || {});
 
-const SchemaData$k = Type.Object({
+const SchemaData$r = Type.Object({
   character: Type.String(),
   group_id: Type.Union([Type.Number(), Type.String()]),
   text: Type.String()
 });
 class GetAiRecord extends GetPacketStatusDepends {
   actionName = ActionName.GetAiRecord;
-  payloadSchema = SchemaData$k;
+  payloadSchema = SchemaData$r;
   async _handle(payload) {
     const rawRsp = await this.core.apis.PacketApi.pkt.operation.GetAiVoice(+payload.group_id, payload.character, payload.text, AIVoiceChatType.Sound);
     if (!rawRsp.msgInfoBody[0]) {
@@ -63603,14 +64159,14 @@ class GetAiRecord extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$j = Type.Object({
+const SchemaData$q = Type.Object({
   character: Type.String(),
   group_id: Type.Union([Type.Number(), Type.String()]),
   text: Type.String()
 });
 class SendGroupAiRecord extends GetPacketStatusDepends {
   actionName = ActionName.SendGroupAiRecord;
-  payloadSchema = SchemaData$j;
+  payloadSchema = SchemaData$q;
   async _handle(payload) {
     await this.core.apis.PacketApi.pkt.operation.GetAiVoice(+payload.group_id, payload.character, payload.text, AIVoiceChatType.Sound);
     return {
@@ -63620,13 +64176,13 @@ class SendGroupAiRecord extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$i = Type.Object({
+const SchemaData$p = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   chat_type: Type.Union([Type.Union([Type.Number(), Type.String()])], { default: 1 })
 });
 class GetAiCharacters extends GetPacketStatusDepends {
   actionName = ActionName.GetAiCharacters;
-  payloadSchema = SchemaData$i;
+  payloadSchema = SchemaData$p;
   async _handle(payload) {
     const rawList = await this.core.apis.PacketApi.pkt.operation.FetchAiVoiceList(+payload.group_id, +payload.chat_type);
     return rawList?.map((item) => ({
@@ -63661,13 +64217,13 @@ class GetClientkey extends OneBotAction {
   }
 }
 
-const SchemaData$h = Type.Object({
+const SchemaData$o = Type.Object({
   cmd: Type.String(),
   data: Type.String(),
   rsp: Type.Union([Type.String(), Type.Boolean()], { default: true })
 });
 class SendPacket extends GetPacketStatusDepends {
-  payloadSchema = SchemaData$h;
+  payloadSchema = SchemaData$o;
   actionName = ActionName.SendPacket;
   async _handle(payload) {
     const rsp = typeof payload.rsp === "boolean" ? payload.rsp : payload.rsp === "true";
@@ -63676,13 +64232,13 @@ class SendPacket extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$g = Type.Object({
+const SchemaData$n = Type.Object({
   group_id: Type.Optional(Type.String()),
   user_id: Type.Optional(Type.String()),
   target_id: Type.Optional(Type.String())
 });
 class SendPokeBase extends GetPacketStatusDepends {
-  payloadSchema = SchemaData$g;
+  payloadSchema = SchemaData$n;
   async _handle(payload) {
     const target_id = !!payload.target_id ? payload.target_id : payload.user_id;
     const peer_id = !!payload.group_id ? payload.group_id : payload.user_id;
@@ -63703,7 +64259,7 @@ class FriendPoke extends SendPokeBase {
   actionName = ActionName.FriendPoke;
 }
 
-const SchemaData$f = Type.Object({
+const SchemaData$m = Type.Object({
   face_id: Type.Union([Type.Number(), Type.String()]),
   // 参考 face_config.json 的 QSid
   face_type: Type.Union([Type.Number(), Type.String()], { default: "1" }),
@@ -63711,7 +64267,7 @@ const SchemaData$f = Type.Object({
 });
 class SetDiyOnlineStatus extends OneBotAction {
   actionName = ActionName.SetDiyOnlineStatus;
-  payloadSchema = SchemaData$f;
+  payloadSchema = SchemaData$m;
   async _handle(payload) {
     const ret = await this.core.apis.UserApi.setDiySelfOnlineStatus(
       payload.face_id.toString(),
@@ -63732,7 +64288,7 @@ class BotExit extends OneBotAction {
   }
 }
 
-const SchemaData$e = Type.Object({
+const SchemaData$l = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   bot_appid: Type.String(),
   button_id: Type.String({ default: "" }),
@@ -63741,7 +64297,7 @@ const SchemaData$e = Type.Object({
 });
 class ClickInlineKeyboardButton extends OneBotAction {
   actionName = ActionName.ClickInlineKeyboardButton;
-  payloadSchema = SchemaData$e;
+  payloadSchema = SchemaData$l;
   async _handle(payload) {
     return await this.core.apis.MsgApi.clickInlineKeyboardButton({
       buttonId: payload.button_id,
@@ -63755,12 +64311,12 @@ class ClickInlineKeyboardButton extends OneBotAction {
   }
 }
 
-const SchemaData$d = Type.Object({
+const SchemaData$k = Type.Object({
   file_id: Type.String()
 });
 class GetPrivateFileUrl extends GetPacketStatusDepends {
   actionName = ActionName.NapCat_GetPrivateFileUrl;
-  payloadSchema = SchemaData$d;
+  payloadSchema = SchemaData$k;
   async _handle(payload) {
     const contextMsgFile = FileNapCatOneBotUUID.decode(payload.file_id);
     if (contextMsgFile?.fileUUID && contextMsgFile.msgId) {
@@ -64005,13 +64561,13 @@ class GetUnidirectionalFriendList extends OneBotAction {
   }
 }
 
-const SchemaData$c = Type.Object({
+const SchemaData$j = Type.Object({
   group_id: Type.String(),
   remark: Type.String()
 });
 class SetGroupRemark extends OneBotAction {
   actionName = ActionName.SetGroupRemark;
-  payloadSchema = SchemaData$c;
+  payloadSchema = SchemaData$j;
   async _handle(payload) {
     let ret = await this.core.apis.GroupApi.setGroupRemark(payload.group_id, payload.remark);
     if (ret.result != 0) {
@@ -64021,7 +64577,7 @@ class SetGroupRemark extends OneBotAction {
   }
 }
 
-const SchemaData$b = Type.Object({
+const SchemaData$i = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_id: Type.String(),
   current_parent_directory: Type.String(),
@@ -64029,7 +64585,7 @@ const SchemaData$b = Type.Object({
 });
 class MoveGroupFile extends GetPacketStatusDepends {
   actionName = ActionName.MoveGroupFile;
-  payloadSchema = SchemaData$b;
+  payloadSchema = SchemaData$i;
   async _handle(payload) {
     const contextMsgFile = FileNapCatOneBotUUID.decode(payload.file_id) || FileNapCatOneBotUUID.decodeModelId(payload.file_id);
     if (contextMsgFile?.fileUUID) {
@@ -64042,13 +64598,13 @@ class MoveGroupFile extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$a = Type.Object({
+const SchemaData$h = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_id: Type.String()
 });
 class TransGroupFile extends GetPacketStatusDepends {
   actionName = ActionName.TransGroupFile;
-  payloadSchema = SchemaData$a;
+  payloadSchema = SchemaData$h;
   async _handle(payload) {
     const contextMsgFile = FileNapCatOneBotUUID.decode(payload.file_id) || FileNapCatOneBotUUID.decodeModelId(payload.file_id);
     if (contextMsgFile?.fileUUID) {
@@ -64064,7 +64620,7 @@ class TransGroupFile extends GetPacketStatusDepends {
   }
 }
 
-const SchemaData$9 = Type.Object({
+const SchemaData$g = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()]),
   file_id: Type.String(),
   current_parent_directory: Type.String(),
@@ -64072,7 +64628,7 @@ const SchemaData$9 = Type.Object({
 });
 class RenameGroupFile extends GetPacketStatusDepends {
   actionName = ActionName.RenameGroupFile;
-  payloadSchema = SchemaData$9;
+  payloadSchema = SchemaData$g;
   async _handle(payload) {
     const contextMsgFile = FileNapCatOneBotUUID.decode(payload.file_id) || FileNapCatOneBotUUID.decodeModelId(payload.file_id);
     if (contextMsgFile?.fileUUID) {
@@ -64138,6 +64694,29 @@ class CleanCache extends OneBotAction {
         }
       });
       await Promise.all(deletePromises);
+      let basic_path = path__default.join(this.core.dataPath, this.core.selfInfo.uin || "10001", "nt_qq", "nt_data");
+      const dirsToClean = ["Pic", "Ptt", "Video", "File", "log"];
+      for (const dir of dirsToClean) {
+        const dirPath = path__default.join(basic_path, dir);
+        try {
+          const files2 = await readdir(dirPath).catch(() => null);
+          if (files2) {
+            const dirDeletePromises = files2.map(async (file) => {
+              const filePath = path__default.join(dirPath, file);
+              try {
+                await unlink$1(filePath);
+                this.core.context.logger.log(`已删除文件: ${filePath}`);
+              } catch (err) {
+                this.core.context.logger.log(`删除文件 ${filePath} 失败: ${err.message}`);
+              }
+            });
+            await Promise.all(dirDeletePromises);
+            this.core.context.logger.log(`目录清理完成: ${dirPath}`);
+          }
+        } catch (err) {
+          this.core.context.logger.log(`清理目录 ${dirPath} 失败: ${err.message}`);
+        }
+      }
       this.core.context.logger.log(`临时文件夹清理完成: ${tempPath}`);
     } catch (err) {
       this.core.context.logger.log(`清理缓存失败: ${err.message}`);
@@ -64146,13 +64725,13 @@ class CleanCache extends OneBotAction {
   }
 }
 
-const SchemaData$8 = Type.Object({
+const SchemaData$f = Type.Object({
   user_id: Type.String(),
   remark: Type.String()
 });
 class SetFriendRemark extends OneBotAction {
   actionName = ActionName.SetFriendRemark;
-  payloadSchema = SchemaData$8;
+  payloadSchema = SchemaData$f;
   async _handle(payload) {
     let friendUid = await this.core.apis.UserApi.getUidByUinV2(payload.user_id);
     let is_friend = await this.core.apis.FriendApi.isBuddy(friendUid);
@@ -64164,7 +64743,7 @@ class SetFriendRemark extends OneBotAction {
   }
 }
 
-const SchemaData$7 = Type.Object({
+const SchemaData$e = Type.Object({
   flag: Type.String(),
   //注意强制String 非isNumeric 不遵守则不符合设计
   approve: Type.Boolean({ default: true })
@@ -64172,24 +64751,24 @@ const SchemaData$7 = Type.Object({
 });
 class SetDoubtFriendsAddRequest extends OneBotAction {
   actionName = ActionName.SetDoubtFriendsAddRequest;
-  payloadSchema = SchemaData$7;
+  payloadSchema = SchemaData$e;
   async _handle(payload) {
     return await this.core.apis.FriendApi.handleDoubtFriendRequest(payload.flag);
   }
 }
 
-const SchemaData$6 = Type.Object({
+const SchemaData$d = Type.Object({
   count: Type.Number({ default: 50 })
 });
 class GetDoubtFriendsAddRequest extends OneBotAction {
   actionName = ActionName.GetDoubtFriendsAddRequest;
-  payloadSchema = SchemaData$6;
+  payloadSchema = SchemaData$d;
   async _handle(payload) {
     return await this.core.apis.FriendApi.getDoubtFriendRequest(payload.count);
   }
 }
 
-const SchemaData$5 = Type.Object({
+const SchemaData$c = Type.Object({
   group_id: Type.String(),
   add_type: Type.Number(),
   group_question: Type.Optional(Type.String()),
@@ -64197,7 +64776,7 @@ const SchemaData$5 = Type.Object({
 });
 class SetGroupAddOption extends OneBotAction {
   actionName = ActionName.SetGroupAddOption;
-  payloadSchema = SchemaData$5;
+  payloadSchema = SchemaData$c;
   async _handle(payload) {
     let ret = await this.core.apis.GroupApi.setGroupAddOption(payload.group_id, {
       addOption: payload.add_type,
@@ -64211,14 +64790,14 @@ class SetGroupAddOption extends OneBotAction {
   }
 }
 
-const SchemaData$4 = Type.Object({
+const SchemaData$b = Type.Object({
   group_id: Type.String(),
   no_code_finger_open: Type.Optional(Type.Number()),
   no_finger_open: Type.Optional(Type.Number())
 });
 class SetGroupSearch extends OneBotAction {
   actionName = ActionName.SetGroupSearch;
-  payloadSchema = SchemaData$4;
+  payloadSchema = SchemaData$b;
   async _handle(payload) {
     let ret = await this.core.apis.GroupApi.setGroupSearch(payload.group_id, {
       noCodeFingerOpenFlag: payload.no_code_finger_open,
@@ -64231,14 +64810,14 @@ class SetGroupSearch extends OneBotAction {
   }
 }
 
-const SchemaData$3 = Type.Object({
+const SchemaData$a = Type.Object({
   group_id: Type.String(),
   robot_member_switch: Type.Optional(Type.Number()),
   robot_member_examine: Type.Optional(Type.Number())
 });
 class SetGroupRobotAddOption extends OneBotAction {
   actionName = ActionName.SetGroupRobotAddOption;
-  payloadSchema = SchemaData$3;
+  payloadSchema = SchemaData$a;
   async _handle(payload) {
     let ret = await this.core.apis.GroupApi.setGroupRobotAddOption(
       payload.group_id,
@@ -64252,14 +64831,14 @@ class SetGroupRobotAddOption extends OneBotAction {
   }
 }
 
-const SchemaData$2 = Type.Object({
+const SchemaData$9 = Type.Object({
   group_id: Type.String(),
   user_id: Type.Array(Type.String()),
   reject_add_request: Type.Optional(Type.Union([Type.Boolean(), Type.String()]))
 });
 class SetGroupKickMembers extends OneBotAction {
   actionName = ActionName.SetGroupKickMembers;
-  payloadSchema = SchemaData$2;
+  payloadSchema = SchemaData$9;
   async _handle(payload) {
     const rejectReq = payload.reject_add_request?.toString() == "true";
     const uids = await Promise.all(payload.user_id.map(async (uin) => await this.core.apis.UserApi.getUidByUinV2(uin)));
@@ -64268,12 +64847,12 @@ class SetGroupKickMembers extends OneBotAction {
   }
 }
 
-const SchemaData$1 = Type.Object({
+const SchemaData$8 = Type.Object({
   group_id: Type.Union([Type.Number(), Type.String()])
 });
 class GetGroupDetailInfo extends OneBotAction {
   actionName = ActionName.GetGroupDetailInfo;
-  payloadSchema = SchemaData$1;
+  payloadSchema = SchemaData$8;
   async _handle(payload) {
     const data = await this.core.apis.GroupApi.fetchGroupDetail(payload.group_id.toString());
     return {
@@ -64315,20 +64894,157 @@ class GetGroupAddRequest extends OneBotAction {
   }
 }
 
-const SchemaData = Type.Object({
+const SchemaData$7 = Type.Object({
   category: Type.Union([Type.Number(), Type.String()]),
   count: Type.Union([Type.Union([Type.Number(), Type.String()])], { default: 1 })
 });
 class GetCollectionList extends OneBotAction {
   actionName = ActionName.GetCollectionList;
-  payloadSchema = SchemaData;
+  payloadSchema = SchemaData$7;
   async _handle(payload) {
     return await this.core.apis.CollectionApi.getAllCollection(+payload.category, +payload.count);
   }
 }
 
+const SchemaData$6 = Type.Object({
+  group_id: Type.String(),
+  message_id: Type.String(),
+  message_seq: Type.Optional(Type.String())
+});
+class SetGroupTodo extends GetPacketStatusDepends {
+  payloadSchema = SchemaData$6;
+  actionName = ActionName.SetGroupTodo;
+  async _handle(payload) {
+    if (payload.message_seq) {
+      return await this.core.apis.PacketApi.pkt.operation.SetGroupTodo(+payload.group_id, payload.message_seq);
+    }
+    const peer = {
+      chatType: ChatType.KCHATTYPEGROUP,
+      peerUid: payload.group_id
+    };
+    const { MsgId, Peer: Peer2 } = MessageUnique.getMsgIdAndPeerByShortId(+payload.message_id) ?? { Peer: peer, MsgId: payload.message_id };
+    let msg = (await this.core.apis.MsgApi.getMsgsByMsgId(Peer2, [MsgId])).msgList[0];
+    if (!msg) throw new Error("消息不存在");
+    await this.core.apis.PacketApi.pkt.operation.SetGroupTodo(+payload.group_id, msg.msgSeq);
+  }
+}
+
+const SchemaData$5 = Type.Object({
+  group_id: Type.String()
+});
+class GetQunAlbumList extends OneBotAction {
+  actionName = ActionName.GetQunAlbumList;
+  payloadSchema = SchemaData$5;
+  async _handle(payload) {
+    return (await this.core.apis.WebApi.getAlbumListByNTQQ(payload.group_id)).response.album_list;
+  }
+}
+
+const SchemaData$4 = Type.Object({
+  group_id: Type.String(),
+  album_id: Type.String(),
+  album_name: Type.String(),
+  file: Type.String()
+});
+class UploadImageToQunAlbum extends OneBotAction {
+  actionName = ActionName.UploadImageToQunAlbum;
+  payloadSchema = SchemaData$4;
+  async _handle(payload) {
+    const downloadResult = await uriToLocalFile(this.core.NapCatTempPath, payload.file);
+    try {
+      return await this.core.apis.WebApi.uploadImageToQunAlbum(payload.group_id, payload.album_id, payload.album_name, downloadResult.path);
+    } finally {
+      if (downloadResult.path && existsSync$1(downloadResult.path)) {
+        await unlink(downloadResult.path);
+      }
+    }
+  }
+}
+
+const SchemaData$3 = Type.Object({
+  group_id: Type.String(),
+  album_id: Type.String(),
+  lloc: Type.String(),
+  content: Type.String()
+});
+class DoGroupAlbumComment extends OneBotAction {
+  actionName = ActionName.DoGroupAlbumComment;
+  payloadSchema = SchemaData$3;
+  async _handle(payload) {
+    return await this.core.apis.WebApi.doAlbumMediaPlainCommentByNTQQ(
+      payload.group_id,
+      payload.album_id,
+      payload.lloc,
+      payload.content
+    );
+  }
+}
+
+const SchemaData$2 = Type.Object({
+  group_id: Type.String(),
+  album_id: Type.String(),
+  attach_info: Type.String({ default: "" })
+});
+class GetGroupAlbumMediaList extends OneBotAction {
+  actionName = ActionName.GetGroupAlbumMediaList;
+  payloadSchema = SchemaData$2;
+  async _handle(payload) {
+    return await this.core.apis.WebApi.getAlbumMediaListByNTQQ(
+      payload.group_id,
+      payload.album_id,
+      payload.attach_info
+    );
+  }
+}
+
+const SchemaData$1 = Type.Object({
+  group_id: Type.String(),
+  album_id: Type.String(),
+  lloc: Type.String(),
+  id: Type.String(),
+  //421_1_0_1012959257|V61Yiali4PELg90bThrH4Bo2iI1M5Kab|V5bCgAxMDEyOTU5MjU3.PyqaPndPxg!^||^421_1_0_1012959257|V61Yiali4PELg90bThrH4Bo2iI1M5Kab|17560363448^||^1
+  set: Type.Boolean({ default: true })
+  //true=点赞 false=取消点赞 未实现
+});
+class SetGroupAlbumMediaLike extends OneBotAction {
+  actionName = ActionName.SetGroupAlbumMediaLike;
+  payloadSchema = SchemaData$1;
+  async _handle(payload) {
+    return await this.core.apis.WebApi.doAlbumMediaLikeByNTQQ(
+      payload.group_id,
+      payload.album_id,
+      payload.lloc,
+      payload.id
+    );
+  }
+}
+
+const SchemaData = Type.Object({
+  group_id: Type.String(),
+  album_id: Type.String(),
+  lloc: Type.String()
+});
+class DelGroupAlbumMedia extends OneBotAction {
+  actionName = ActionName.DelGroupAlbumMedia;
+  payloadSchema = SchemaData;
+  async _handle(payload) {
+    return await this.core.apis.WebApi.deleteAlbumMediaByNTQQ(
+      payload.group_id,
+      payload.album_id,
+      payload.lloc
+    );
+  }
+}
+
 function createActionMap(obContext, core) {
   const actionHandlers = [
+    new DelGroupAlbumMedia(obContext, core),
+    new SetGroupAlbumMediaLike(obContext, core),
+    new DoGroupAlbumComment(obContext, core),
+    new GetGroupAlbumMediaList(obContext, core),
+    new GetQunAlbumList(obContext, core),
+    new UploadImageToQunAlbum(obContext, core),
+    new SetGroupTodo(obContext, core),
     new GetGroupDetailInfo(obContext, core),
     new SetGroupKickMembers(obContext, core),
     new SetGroupAddOption(obContext, core),
@@ -64478,7 +65194,7 @@ function createActionMap(obContext, core) {
 
 const name = "napcat";
 const type = "module";
-const version = "4.8.98";
+const version = "4.8.106";
 const scripts = {"build:universal":"npm run build:webui && vite build --mode universal || exit 1","build:framework":"npm run build:webui && vite build --mode framework || exit 1","build:shell":"npm run build:webui && vite build --mode shell || exit 1","build:webui":"cd napcat.webui && npm run build","dev:universal":"vite build --mode universal","dev:framework":"vite build --mode framework","dev:shell":"vite build --mode shell","dev:shell-analysis":"vite build --mode shell-analysis","dev:webui":"cd napcat.webui && npm run dev","lint":"eslint --fix src/**/*.{js,ts,vue}","depend":"cd dist && npm install --omit=dev","dev:depend":"npm i && cd napcat.webui && npm i"};
 const devDependencies = {"@babel/core":"^7.28.0","@babel/generator":"^7.28.0","@babel/parser":"^7.28.0","@babel/preset-typescript":"^7.24.7","@babel/traverse":"^7.28.0","@babel/types":"^7.28.2","@eslint/compat":"^1.3.1","@eslint/eslintrc":"^3.1.0","@eslint/js":"^9.33.0","@homebridge/node-pty-prebuilt-multiarch":"^0.12.0-beta.5","@log4js-node/log4js-api":"^1.0.2","@napneko/nap-proto-core":"^0.0.4","@rollup/plugin-node-resolve":"^16.0.0","@rollup/plugin-typescript":"^12.1.4","@sinclair/typebox":"^0.34.38","@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/multer":"^1.4.12","@types/node":"^22.0.1","@types/on-finished":"^2.3.4","@types/qrcode-terminal":"^0.12.2","@types/react-color":"^3.0.13","@types/type-is":"^1.6.7","@types/ws":"^8.5.12","@typescript-eslint/eslint-plugin":"^8.3.0","@typescript-eslint/parser":"^8.39.0","ajv":"^8.13.0","async-mutex":"^0.5.0","commander":"^13.0.0","compressing":"^1.10.1","cors":"^2.8.5","esbuild":"0.25.8","eslint":"^9.14.0","eslint-import-resolver-typescript":"^4.4.4","eslint-plugin-import":"^2.32.0","express-rate-limit":"^7.5.0","fast-xml-parser":"^4.3.6","file-type":"^21.0.0","globals":"^16.0.0","json5":"^2.2.3","multer":"^2.0.1","napcat.protobuf":"^1.1.4","typescript":"^5.3.3","typescript-eslint":"^8.35.1","vite":"^7.1.1","vite-plugin-cp":"^6.0.0","vite-tsconfig-paths":"^5.1.0","winston":"^3.17.0"};
 const dependencies = {"express":"^5.0.0","silk-wasm":"^3.6.1","ws":"^8.18.3"};
@@ -64823,7 +65539,7 @@ const HttpServerConfigSchema = Type.Object({
   name: Type.String({ default: "http-server" }),
   enable: Type.Boolean({ default: false }),
   port: Type.Number({ default: 3e3 }),
-  host: Type.String({ default: "0.0.0.0" }),
+  host: Type.String({ default: "127.0.0.1" }),
   enableCors: Type.Boolean({ default: true }),
   enableWebsocket: Type.Boolean({ default: true }),
   messagePostFormat: Type.String({ default: "array" }),
@@ -64834,7 +65550,7 @@ const HttpSseServerConfigSchema = Type.Object({
   name: Type.String({ default: "http-sse-server" }),
   enable: Type.Boolean({ default: false }),
   port: Type.Number({ default: 3e3 }),
-  host: Type.String({ default: "0.0.0.0" }),
+  host: Type.String({ default: "127.0.0.1" }),
   enableCors: Type.Boolean({ default: true }),
   enableWebsocket: Type.Boolean({ default: true }),
   messagePostFormat: Type.String({ default: "array" }),
@@ -64854,7 +65570,7 @@ const HttpClientConfigSchema = Type.Object({
 const WebsocketServerConfigSchema = Type.Object({
   name: Type.String({ default: "websocket-server" }),
   enable: Type.Boolean({ default: false }),
-  host: Type.String({ default: "0.0.0.0" }),
+  host: Type.String({ default: "127.0.0.1" }),
   port: Type.Number({ default: 3001 }),
   messagePostFormat: Type.String({ default: "array" }),
   reportSelfMessage: Type.Boolean({ default: false }),
@@ -64933,6 +65649,275 @@ class OB11HttpSSEServerAdapter extends OB11HttpServerAdapter {
   }
 }
 
+class OB11PluginMangerAdapter extends IOB11NetworkAdapter {
+  pluginPath;
+  loadedPlugins = /* @__PURE__ */ new Map();
+  constructor(name, core, obContext, actions) {
+    const config = {
+      name,
+      messagePostFormat: "array",
+      reportSelfMessage: true,
+      enable: true,
+      debug: true
+    };
+    super(name, config, core, obContext, actions);
+    this.pluginPath = this.core.context.pathWrapper.pluginPath;
+  }
+  /**
+   * 扫描并加载插件
+   */
+  async loadPlugins() {
+    try {
+      if (!fs__default.existsSync(this.pluginPath)) {
+        this.logger.logWarn(`[Plugin Adapter] Plugin directory does not exist: ${this.pluginPath}`);
+        fs__default.mkdirSync(this.pluginPath, { recursive: true });
+        return;
+      }
+      const items = fs__default.readdirSync(this.pluginPath, { withFileTypes: true });
+      for (const item of items) {
+        if (item.isFile()) {
+          await this.loadFilePlugin(item.name);
+        } else if (item.isDirectory()) {
+          await this.loadDirectoryPlugin(item.name);
+        }
+      }
+      this.logger.log(`[Plugin Adapter] Loaded ${this.loadedPlugins.size} plugins`);
+    } catch (error) {
+      this.logger.logError(`[Plugin Adapter] Error loading plugins:`, error);
+    }
+  }
+  /**
+   * 加载单文件插件 (.mjs, .js)
+   */
+  async loadFilePlugin(filename) {
+    if (!this.isSupportedFile(filename)) {
+      return;
+    }
+    const filePath = path__default.join(this.pluginPath, filename);
+    const pluginName = path__default.parse(filename).name;
+    try {
+      const module = await this.importModule(filePath);
+      if (!this.isValidPluginModule(module)) {
+        this.logger.logWarn(`[Plugin Adapter] File ${filename} is not a valid plugin (missing plugin methods)`);
+        return;
+      }
+      const plugin = {
+        name: pluginName,
+        pluginPath: this.pluginPath,
+        entryPath: filePath,
+        module
+      };
+      await this.registerPlugin(plugin);
+    } catch (error) {
+      this.logger.logError(`[Plugin Adapter] Error loading file plugin ${filename}:`, error);
+    }
+  }
+  /**
+   * 加载目录插件
+   */
+  async loadDirectoryPlugin(dirname) {
+    const pluginDir = path__default.join(this.pluginPath, dirname);
+    try {
+      let packageJson;
+      const packageJsonPath = path__default.join(pluginDir, "package.json");
+      if (fs__default.existsSync(packageJsonPath)) {
+        try {
+          const packageContent = fs__default.readFileSync(packageJsonPath, "utf-8");
+          packageJson = JSON.parse(packageContent);
+        } catch (error) {
+          this.logger.logWarn(`[Plugin Adapter] Invalid package.json in ${dirname}:`, error);
+        }
+      }
+      const entryFile = this.findEntryFile(pluginDir, packageJson);
+      if (!entryFile) {
+        this.logger.logWarn(`[Plugin Adapter] No valid entry file found for plugin directory: ${dirname}`);
+        return;
+      }
+      const entryPath = path__default.join(pluginDir, entryFile);
+      const module = await this.importModule(entryPath);
+      if (!this.isValidPluginModule(module)) {
+        this.logger.logWarn(`[Plugin Adapter] Directory ${dirname} does not contain a valid plugin`);
+        return;
+      }
+      const plugin = {
+        name: packageJson?.name || dirname,
+        version: packageJson?.version,
+        pluginPath: pluginDir,
+        entryPath,
+        packageJson,
+        module
+      };
+      await this.registerPlugin(plugin);
+    } catch (error) {
+      this.logger.logError(`[Plugin Adapter] Error loading directory plugin ${dirname}:`, error);
+    }
+  }
+  /**
+   * 查找插件目录的入口文件
+   */
+  findEntryFile(pluginDir, packageJson) {
+    const possibleEntries = [
+      packageJson?.main,
+      "index.mjs",
+      "index.js",
+      "main.mjs",
+      "main.js"
+    ].filter(Boolean);
+    for (const entry of possibleEntries) {
+      const entryPath = path__default.join(pluginDir, entry);
+      if (fs__default.existsSync(entryPath) && fs__default.statSync(entryPath).isFile()) {
+        return entry;
+      }
+    }
+    return null;
+  }
+  /**
+   * 检查是否为支持的文件类型
+   */
+  isSupportedFile(filename) {
+    const ext = path__default.extname(filename).toLowerCase();
+    return [".mjs", ".js"].includes(ext);
+  }
+  /**
+   * 动态导入模块
+   */
+  async importModule(filePath) {
+    const fileUrl = `file://${filePath.replace(/\\/g, "/")}`;
+    return await import(fileUrl);
+  }
+  /**
+   * 检查模块是否为有效的插件模块
+   */
+  isValidPluginModule(module) {
+    return module && typeof module.plugin_init === "function";
+  }
+  /**
+   * 注册插件
+   */
+  async registerPlugin(plugin) {
+    if (this.loadedPlugins.has(plugin.name)) {
+      this.logger.logWarn(`[Plugin Adapter] Plugin name conflict: ${plugin.name}, skipping...`);
+      return;
+    }
+    this.loadedPlugins.set(plugin.name, plugin);
+    this.logger.log(`[Plugin Adapter] Registered plugin: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ""}`);
+    try {
+      await plugin.module.plugin_init(this.core, this.obContext, this.actions, this);
+      this.logger.log(`[Plugin Adapter] Initialized plugin: ${plugin.name}`);
+    } catch (error) {
+      this.logger.logError(`[Plugin Adapter] Error initializing plugin ${plugin.name}:`, error);
+    }
+  }
+  /**
+   * 卸载插件
+   */
+  async unloadPlugin(pluginName) {
+    const plugin = this.loadedPlugins.get(pluginName);
+    if (!plugin) {
+      return;
+    }
+    if (typeof plugin.module.plugin_cleanup === "function") {
+      try {
+        await plugin.module.plugin_cleanup(this.core, this.obContext, this.actions, this);
+        this.logger.log(`[Plugin Adapter] Cleaned up plugin: ${pluginName}`);
+      } catch (error) {
+        this.logger.logError(`[Plugin Adapter] Error cleaning up plugin ${pluginName}:`, error);
+      }
+    }
+    this.loadedPlugins.delete(pluginName);
+    this.logger.log(`[Plugin Adapter] Unloaded plugin: ${pluginName}`);
+  }
+  onEvent(event) {
+    if (!this.isEnable) {
+      return;
+    }
+    for (const [, plugin] of this.loadedPlugins) {
+      this.callPluginEventHandler(plugin, event);
+    }
+  }
+  /**
+   * 调用插件的事件处理方法
+   */
+  async callPluginEventHandler(plugin, event) {
+    try {
+      if (typeof plugin.module.plugin_onevent === "function") {
+        await plugin.module.plugin_onevent(this.name, this.core, this.obContext, event, this.actions, this);
+      }
+      if (event.message_type && typeof plugin.module.plugin_onmessage === "function") {
+        await plugin.module.plugin_onmessage(this.name, this.core, this.obContext, event, this.actions, this);
+      }
+    } catch (error) {
+      this.logger.logError(`[Plugin Adapter] Error calling plugin ${plugin.name} event handler:`, error);
+    }
+  }
+  async open() {
+    if (this.isEnable) {
+      return;
+    }
+    this.logger.log("[Plugin Adapter] Opening plugin adapter...");
+    this.isEnable = true;
+    await this.loadPlugins();
+    this.logger.log(`[Plugin Adapter] Plugin adapter opened with ${this.loadedPlugins.size} plugins loaded`);
+  }
+  async close() {
+    if (!this.isEnable) {
+      return;
+    }
+    this.logger.log("[Plugin Adapter] Closing plugin adapter...");
+    this.isEnable = false;
+    const pluginNames = Array.from(this.loadedPlugins.keys());
+    for (const pluginName of pluginNames) {
+      await this.unloadPlugin(pluginName);
+    }
+    this.logger.log("[Plugin Adapter] Plugin adapter closed");
+  }
+  async reload() {
+    this.logger.log("[Plugin Adapter] Reloading plugin adapter...");
+    await this.close();
+    await this.open();
+    this.logger.log("[Plugin Adapter] Plugin adapter reloaded");
+    return OB11NetworkReloadType.Normal;
+  }
+  /**
+   * 获取已加载的插件列表
+   */
+  getLoadedPlugins() {
+    return Array.from(this.loadedPlugins.values());
+  }
+  /**
+   * 获取插件信息
+   */
+  getPluginInfo(pluginName) {
+    return this.loadedPlugins.get(pluginName);
+  }
+  /**
+   * 重载指定插件
+   */
+  async reloadPlugin(pluginName) {
+    const plugin = this.loadedPlugins.get(pluginName);
+    if (!plugin) {
+      this.logger.logWarn(`[Plugin Adapter] Plugin ${pluginName} not found`);
+      return false;
+    }
+    try {
+      await this.unloadPlugin(pluginName);
+      const isDirectory = fs__default.statSync(plugin.pluginPath).isDirectory() && plugin.pluginPath !== this.pluginPath;
+      if (isDirectory) {
+        const dirname = path__default.basename(plugin.pluginPath);
+        await this.loadDirectoryPlugin(dirname);
+      } else {
+        const filename = path__default.basename(plugin.entryPath);
+        await this.loadFilePlugin(filename);
+      }
+      this.logger.log(`[Plugin Adapter] Plugin ${pluginName} reloaded successfully`);
+      return true;
+    } catch (error) {
+      this.logger.logError(`[Plugin Adapter] Error reloading plugin ${pluginName}:`, error);
+      return false;
+    }
+  }
+}
+
 class NapCatOneBot11Adapter {
   core;
   context;
@@ -64941,7 +65926,7 @@ class NapCatOneBot11Adapter {
   networkManager;
   actions;
   bootTime = Date.now() / 1e3;
-  recallMsgCache = new LRUCache(100);
+  recallEventCache = /* @__PURE__ */ new Map();
   constructor(core, context, pathWrapper) {
     this.core = core;
     this.context = context;
@@ -64989,6 +65974,12 @@ class NapCatOneBot11Adapter {
     }).catch((e) => this.context.logger.logError(e));
     const serviceInfo = await this.creatOneBotLog(ob11Config);
     this.context.logger.log(`[Notice] [OneBot11] ${serviceInfo}`);
+    if (existsSync$1(this.context.pathWrapper.pluginPath)) {
+      this.context.logger.log(`[Plugins] 插件目录存在，开始加载插件`);
+      this.networkManager.registerAdapter(
+        new OB11PluginMangerAdapter("plugin_manager", this.core, this, this.actions)
+      );
+    }
     for (const key of ob11Config.network.httpServers) {
       if (key.enable) {
         this.networkManager.registerAdapter(
@@ -65159,16 +66150,19 @@ ${newLog}`);
       };
       let msg = (await this.core.apis.MsgApi.queryMsgsWithFilterExWithSeq(peer, msgSeq)).msgList.find((e) => e.msgType == NTMsgType.KMSGTYPEGRAYTIPS);
       const element = msg?.elements.find((e) => !!e.grayTipElement?.revokeElement);
-      if (element?.grayTipElement?.revokeElement.isSelfOperate && msg) {
-        await this.core.eventWrapper.registerListen(
-          "NodeIKernelMsgListener/onMsgRecall",
-          (chatType2, uid2, msgSeq2) => {
-            return chatType2 === msg?.chatType && uid2 === msg?.peerUid && msgSeq2 === msg?.msgSeq;
-          }
-        ).catch(() => {
-          msg = void 0;
-          this.context.logger.logDebug("自操作消息撤回事件");
-        });
+      if (msg && element?.grayTipElement?.revokeElement.isSelfOperate) {
+        const isSelfDevice = this.recallEventCache.has(msg.msgId);
+        if (isSelfDevice) {
+          await this.core.eventWrapper.registerListen(
+            "NodeIKernelMsgListener/onMsgRecall",
+            (chatType2, uid2, msgSeq2) => {
+              return chatType2 === msg?.chatType && uid2 === msg?.peerUid && msgSeq2 === msg?.msgSeq;
+            }
+          ).catch(() => {
+            msg = void 0;
+            this.context.logger.logDebug("自操作消息撤回事件");
+          });
+        }
       }
       if (msg && element) {
         const recallEvent = await this.emitRecallMsg(msg, element);
@@ -65699,10 +66693,16 @@ const themeType = Type.Object(
 const WebUiConfigSchema = Type.Object({
   host: Type.String({ default: "0.0.0.0" }),
   port: Type.Number({ default: 6099 }),
-  token: Type.String({ default: "napcat" }),
+  // napcat+<月份日时>，例如 napcat062511
+  token: Type.String({ default: "napcat" + ((/* @__PURE__ */ new Date()).getMonth() + 1).toString().padStart(2, "0") + (/* @__PURE__ */ new Date()).getDate().toString().padStart(2, "0") + (/* @__PURE__ */ new Date()).getHours().toString().padStart(2, "0") }),
   loginRate: Type.Number({ default: 10 }),
   autoLoginAccount: Type.String({ default: "" }),
-  theme: themeType
+  theme: themeType,
+  defaultToken: Type.Boolean({ default: true }),
+  // 是否关闭WebUI
+  disableWebUI: Type.Boolean({ default: false }),
+  // 是否关闭非局域网访问
+  disableNonLANAccess: Type.Boolean({ default: false })
 });
 class WebUiConfigWrapper {
   WebUiConfigData = void 0;
@@ -65756,7 +66756,7 @@ class WebUiConfigWrapper {
     if (currentConfig.token !== oldToken) {
       throw new Error("旧 token 不匹配");
     }
-    await this.UpdateWebUIConfig({ token: newToken });
+    await this.UpdateWebUIConfig({ token: newToken, defaultToken: false });
   }
   // 获取日志文件夹路径
   async GetLogsPath() {
@@ -65817,6 +66817,24 @@ class WebUiConfigWrapper {
   // 更新主题内容
   async UpdateTheme(theme) {
     await this.UpdateWebUIConfig({ theme });
+  }
+  // 获取是否禁用WebUI
+  async GetDisableWebUI() {
+    const config = await this.GetWebUIConfig();
+    return config.disableWebUI;
+  }
+  // 更新是否禁用WebUI
+  async UpdateDisableWebUI(disable) {
+    await this.UpdateWebUIConfig({ disableWebUI: disable });
+  }
+  // 获取是否禁用非局域网访问
+  async GetDisableNonLANAccess() {
+    const config = await this.GetWebUIConfig();
+    return config.disableNonLANAccess;
+  }
+  // 更新是否禁用非局域网访问
+  async UpdateDisableNonLANAccess(disable) {
+    await this.UpdateWebUIConfig({ disableNonLANAccess: disable });
   }
 }
 
@@ -65884,6 +66902,10 @@ const OB11SetConfigHandler = async (req, res) => {
   if (isEmpty(req.body.config)) {
     return sendError(res, "config is empty");
   }
+  const webuiToken = await WebUiConfig.GetWebUIConfig();
+  if (webuiToken.defaultToken) {
+    return sendError(res, "默认密码禁止写入配置");
+  }
   try {
     const config = loadConfig(lib$4.parse(req.body.config));
     await WebUiDataRuntime.setOB11Config(config);
@@ -65893,9 +66915,9 @@ const OB11SetConfigHandler = async (req, res) => {
   }
 };
 
-const router$6 = Router();
-router$6.post("/GetConfig", OB11GetConfigHandler);
-router$6.post("/SetConfig", OB11SetConfigHandler);
+const router$7 = Router();
+router$7.post("/GetConfig", OB11GetConfigHandler);
+router$7.post("/SetConfig", OB11SetConfigHandler);
 
 class AuthHelper {
   static secretKey = Math.random().toString(36).slice(2);
@@ -66069,19 +67091,19 @@ const setAutoLoginAccountHandler = async (req, res) => {
   return sendSuccess(res, null);
 };
 
-const router$5 = Router();
-router$5.all("/GetQuickLoginList", QQGetQuickLoginListHandler);
-router$5.all("/GetQuickLoginListNew", QQGetLoginListNewHandler);
-router$5.post("/CheckLoginStatus", QQCheckLoginStatusHandler);
-router$5.post("/GetQQLoginQrcode", QQGetQRcodeHandler);
-router$5.post("/SetQuickLogin", QQSetQuickLoginHandler);
-router$5.post("/GetQQLoginInfo", getQQLoginInfoHandler);
-router$5.post("/GetQuickLoginQQ", getAutoLoginAccountHandler);
-router$5.post("/SetQuickLoginQQ", setAutoLoginAccountHandler);
+const router$6 = Router();
+router$6.all("/GetQuickLoginList", QQGetQuickLoginListHandler);
+router$6.all("/GetQuickLoginListNew", QQGetLoginListNewHandler);
+router$6.post("/CheckLoginStatus", QQCheckLoginStatusHandler);
+router$6.post("/GetQQLoginQrcode", QQGetQRcodeHandler);
+router$6.post("/SetQuickLogin", QQSetQuickLoginHandler);
+router$6.post("/GetQQLoginInfo", getQQLoginInfoHandler);
+router$6.post("/GetQuickLoginQQ", getAutoLoginAccountHandler);
+router$6.post("/SetQuickLoginQQ", setAutoLoginAccountHandler);
 
 const CheckDefaultTokenHandler = async (_, res) => {
   const webuiToken = await WebUiConfig.GetWebUIConfig();
-  if (webuiToken.token === "napcat") {
+  if (webuiToken.defaultToken) {
     return sendSuccess(res, true);
   }
   return sendSuccess(res, false);
@@ -66134,10 +67156,13 @@ const checkHandler = async (req, res) => {
   }
 };
 const UpdateTokenHandler = async (req, res) => {
-  const { oldToken, newToken } = req.body;
+  const { oldToken, newToken, fromDefault } = req.body;
   const authorization = req.headers.authorization;
-  if (isEmpty(oldToken) || isEmpty(newToken)) {
-    return sendError(res, "oldToken or newToken is empty");
+  if (isEmpty(newToken)) {
+    return sendError(res, "newToken is empty");
+  }
+  if (!fromDefault && isEmpty(oldToken)) {
+    return sendError(res, "oldToken is required when not updating from default password");
   }
   try {
     if (authorization) {
@@ -66145,19 +67170,27 @@ const UpdateTokenHandler = async (req, res) => {
       const Credential = JSON.parse(Buffer.from(CredentialBase64, "base64").toString());
       AuthHelper.revokeCredential(Credential);
     }
-    await WebUiConfig.UpdateToken(oldToken, newToken);
+    if (fromDefault) {
+      const currentConfig = await WebUiConfig.GetWebUIConfig();
+      if (!currentConfig.defaultToken) {
+        return sendError(res, "Current password is not default password");
+      }
+      await WebUiConfig.UpdateWebUIConfig({ token: newToken, defaultToken: false });
+    } else {
+      await WebUiConfig.UpdateToken(oldToken, newToken);
+    }
     return sendSuccess(res, "Token updated successfully");
   } catch (e) {
     return sendError(res, `Failed to update token: ${e.message}`);
   }
 };
 
-const router$4 = Router();
-router$4.post("/login", LoginHandler);
-router$4.post("/check", checkHandler);
-router$4.post("/logout", LogoutHandler);
-router$4.post("/update_token", UpdateTokenHandler);
-router$4.get("/check_using_default_token", CheckDefaultTokenHandler);
+const router$5 = Router();
+router$5.post("/login", LoginHandler);
+router$5.post("/check", checkHandler);
+router$5.post("/logout", LogoutHandler);
+router$5.post("/update_token", UpdateTokenHandler);
+router$5.get("/check_using_default_token", CheckDefaultTokenHandler);
 
 Object.defineProperty(global, "__dirname", {
   get() {
@@ -67205,8 +68238,8 @@ const CreateTerminalHandler = async (req, res) => {
   if (isMacOS) {
     return sendError(res, "MacOS不支持终端");
   }
-  if ((await WebUiConfig.GetWebUIConfig()).token === "napcat") {
-    return sendError(res, "默认密码禁止创建终端");
+  if ((await WebUiConfig.GetWebUIConfig()).defaultToken) {
+    return sendError(res, "该密码禁止创建终端");
   }
   try {
     const { cols, rows } = req.body;
@@ -67230,13 +68263,13 @@ const CloseTerminalHandler = (req, res) => {
   return sendSuccess(res, {});
 };
 
-const router$3 = Router();
-router$3.get("/GetLog", LogHandler);
-router$3.get("/GetLogList", LogListHandler);
-router$3.get("/GetLogRealTime", LogRealTimeHandler);
-router$3.get("/terminal/list", GetTerminalListHandler);
-router$3.post("/terminal/create", CreateTerminalHandler);
-router$3.post("/terminal/:id/close", CloseTerminalHandler);
+const router$4 = Router();
+router$4.get("/GetLog", LogHandler);
+router$4.get("/GetLogList", LogListHandler);
+router$4.get("/GetLogRealTime", LogRealTimeHandler);
+router$4.get("/terminal/list", GetTerminalListHandler);
+router$4.post("/terminal/create", CreateTerminalHandler);
+router$4.post("/terminal/:id/close", CloseTerminalHandler);
 
 const PackageInfoHandler = (_, res) => {
   const data = WebUiDataRuntime.getPackageJson();
@@ -67392,13 +68425,13 @@ const GetProxyHandler = async (req, res) => {
   }
 };
 
-const router$2 = Router();
-router$2.get("/QQVersion", QQVersionHandler);
-router$2.get("/PackageInfo", PackageInfoHandler);
-router$2.get("/GetSysStatusRealTime", StatusRealTimeHandler);
-router$2.get("/proxy", GetProxyHandler);
-router$2.get("/Theme", GetThemeConfigHandler);
-router$2.post("/SetTheme", SetThemeConfigHandler);
+const router$3 = Router();
+router$3.get("/QQVersion", QQVersionHandler);
+router$3.get("/PackageInfo", PackageInfoHandler);
+router$3.get("/GetSysStatusRealTime", StatusRealTimeHandler);
+router$3.get("/proxy", GetProxyHandler);
+router$3.get("/Theme", GetThemeConfigHandler);
+router$3.post("/SetTheme", SetThemeConfigHandler);
 
 // source/headers.ts
 var SUPPORTED_DRAFT_VERSIONS = ["draft-6", "draft-7", "draft-8"];
@@ -89297,6 +90330,10 @@ const checkSameTypeExists = async (pathToCheck, isDirectory) => {
   }
 };
 const ListFilesHandler = async (req, res) => {
+  const webuiToken = await WebUiConfig.GetWebUIConfig();
+  if (webuiToken.defaultToken) {
+    return sendError(res, "默认密码禁止使用");
+  }
   try {
     const requestPath = req.query["path"] || (isWindows ? "C:\\" : "/");
     const normalizedPath = normalizePath(requestPath);
@@ -89577,7 +90614,7 @@ const DeleteWebUIFontHandler = async (_req, res) => {
   }
 };
 
-const router$1 = Router();
+const router$2 = Router();
 const apiLimiter = lib_default({
   windowMs: 1 * 60 * 1e3,
   // 1分钟内
@@ -89587,36 +90624,171 @@ const apiLimiter = lib_default({
     xForwardedForHeader: false
   }
 });
-router$1.use(apiLimiter);
-router$1.get("/list", ListFilesHandler);
-router$1.post("/mkdir", CreateDirHandler);
-router$1.post("/delete", DeleteHandler);
-router$1.get("/read", ReadFileHandler);
-router$1.post("/write", WriteFileHandler);
-router$1.post("/create", CreateFileHandler);
-router$1.post("/batchDelete", BatchDeleteHandler);
-router$1.post("/rename", RenameHandler);
-router$1.post("/move", MoveHandler);
-router$1.post("/batchMove", BatchMoveHandler);
-router$1.post("/download", DownloadHandler);
-router$1.post("/batchDownload", BatchDownloadHandler);
-router$1.post("/upload", UploadHandler);
-router$1.post("/font/upload/webui", UploadWebUIFontHandler);
-router$1.post("/font/delete/webui", DeleteWebUIFontHandler);
+router$2.use(apiLimiter);
+router$2.get("/list", ListFilesHandler);
+router$2.post("/mkdir", CreateDirHandler);
+router$2.post("/delete", DeleteHandler);
+router$2.get("/read", ReadFileHandler);
+router$2.post("/write", WriteFileHandler);
+router$2.post("/create", CreateFileHandler);
+router$2.post("/batchDelete", BatchDeleteHandler);
+router$2.post("/rename", RenameHandler);
+router$2.post("/move", MoveHandler);
+router$2.post("/batchMove", BatchMoveHandler);
+router$2.post("/download", DownloadHandler);
+router$2.post("/batchDownload", BatchDownloadHandler);
+router$2.post("/upload", UploadHandler);
+router$2.post("/font/upload/webui", UploadWebUIFontHandler);
+router$2.post("/font/delete/webui", DeleteWebUIFontHandler);
+
+const GetWebUIConfigHandler = async (_, res) => {
+  try {
+    const config = await WebUiConfig.GetWebUIConfig();
+    return sendSuccess(res, {
+      host: config.host,
+      port: config.port,
+      loginRate: config.loginRate,
+      disableWebUI: config.disableWebUI,
+      disableNonLANAccess: config.disableNonLANAccess
+    });
+  } catch (error) {
+    const msg = error.message;
+    return sendError(res, `获取WebUI配置失败: ${msg}`);
+  }
+};
+const GetDisableWebUIHandler = async (_, res) => {
+  try {
+    const disable = await WebUiConfig.GetDisableWebUI();
+    return sendSuccess(res, disable);
+  } catch (error) {
+    const msg = error.message;
+    return sendError(res, `获取WebUI禁用状态失败: ${msg}`);
+  }
+};
+const UpdateDisableWebUIHandler = async (req, res) => {
+  try {
+    const { disable } = req.body;
+    if (typeof disable !== "boolean") {
+      return sendError(res, "disable参数必须是布尔值");
+    }
+    await WebUiConfig.UpdateDisableWebUI(disable);
+    return sendSuccess(res, null);
+  } catch (error) {
+    const msg = error.message;
+    return sendError(res, `更新WebUI禁用状态失败: ${msg}`);
+  }
+};
+const GetDisableNonLANAccessHandler = async (_, res) => {
+  try {
+    const disable = await WebUiConfig.GetDisableNonLANAccess();
+    return sendSuccess(res, disable);
+  } catch (error) {
+    const msg = error.message;
+    return sendError(res, `获取非局域网访问禁用状态失败: ${msg}`);
+  }
+};
+const UpdateDisableNonLANAccessHandler = async (req, res) => {
+  try {
+    const { disable } = req.body;
+    if (typeof disable !== "boolean") {
+      return sendError(res, "disable参数必须是布尔值");
+    }
+    await WebUiConfig.UpdateDisableNonLANAccess(disable);
+    return sendSuccess(res, null);
+  } catch (error) {
+    const msg = error.message;
+    return sendError(res, `更新非局域网访问禁用状态失败: ${msg}`);
+  }
+};
+const UpdateWebUIConfigHandler = async (req, res) => {
+  try {
+    const { host, port, loginRate, disableWebUI, disableNonLANAccess } = req.body;
+    const updateConfig = {};
+    if (host !== void 0) {
+      if (isEmpty(host)) {
+        return sendError(res, "host不能为空");
+      }
+      updateConfig.host = host;
+    }
+    if (port !== void 0) {
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        return sendError(res, "port必须是1-65535之间的整数");
+      }
+      updateConfig.port = port;
+    }
+    if (loginRate !== void 0) {
+      if (!Number.isInteger(loginRate) || loginRate < 1) {
+        return sendError(res, "loginRate必须是大于0的整数");
+      }
+      updateConfig.loginRate = loginRate;
+    }
+    if (disableWebUI !== void 0) {
+      if (typeof disableWebUI !== "boolean") {
+        return sendError(res, "disableWebUI必须是布尔值");
+      }
+      updateConfig.disableWebUI = disableWebUI;
+    }
+    if (disableNonLANAccess !== void 0) {
+      if (typeof disableNonLANAccess !== "boolean") {
+        return sendError(res, "disableNonLANAccess必须是布尔值");
+      }
+      updateConfig.disableNonLANAccess = disableNonLANAccess;
+    }
+    await WebUiConfig.UpdateWebUIConfig(updateConfig);
+    return sendSuccess(res, null);
+  } catch (error) {
+    const msg = error.message;
+    return sendError(res, `更新WebUI配置失败: ${msg}`);
+  }
+};
+
+const router$1 = Router();
+router$1.get("/GetConfig", GetWebUIConfigHandler);
+router$1.post("/UpdateConfig", UpdateWebUIConfigHandler);
+router$1.get("/GetDisableWebUI", GetDisableWebUIHandler);
+router$1.post("/UpdateDisableWebUI", UpdateDisableWebUIHandler);
+router$1.get("/GetDisableNonLANAccess", GetDisableNonLANAccessHandler);
+router$1.post("/UpdateDisableNonLANAccess", UpdateDisableNonLANAccessHandler);
 
 const router = Router();
 router.use(auth);
 router.all("/test", (_, res) => {
   return sendSuccess(res);
 });
-router.use("/base", router$2);
-router.use("/auth", router$4);
-router.use("/QQLogin", router$5);
-router.use("/OB11Config", router$6);
-router.use("/Log", router$3);
-router.use("/File", router$1);
+router.use("/base", router$3);
+router.use("/auth", router$5);
+router.use("/QQLogin", router$6);
+router.use("/OB11Config", router$7);
+router.use("/Log", router$4);
+router.use("/File", router$2);
+router.use("/WebUIConfig", router$1);
 
-const cors = (req, res, next) => {
+function isLANIP(ip) {
+  if (!ip) return false;
+  const cleanIP = ip.replace(/^::ffff:/, "");
+  if (cleanIP === "127.0.0.1" || cleanIP === "localhost" || cleanIP === "::1") {
+    return true;
+  }
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = cleanIP.match(ipv4Regex);
+  if (match) {
+    const [, a, b] = match.map(Number);
+    if (a === 10) return true;
+    if (a === 172 && b !== void 0 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  return false;
+}
+const cors = async (req, res, next) => {
+  const config = await WebUiConfig.GetWebUIConfig();
+  if (config.disableNonLANAccess) {
+    const clientIP = req.ip || req.socket.remoteAddress || "";
+    if (!isLANIP(clientIP)) {
+      res.status(403).json({ error: "非局域网访问被禁止" });
+      return;
+    }
+  }
   const origin = req.headers.origin || "*";
   res.header("Access-Control-Allow-Origin", origin);
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -89630,7 +90802,6 @@ const cors = (req, res, next) => {
 };
 
 const normalizeHost = (host) => {
-  if (host === "0.0.0.0") return "127.0.0.1";
   if (isIP$1(host) === 6) return `[${host}]`;
   return host;
 };
@@ -89679,7 +90850,12 @@ async function checkCertificates(logger) {
 async function InitWebUi(logger, pathWrapper) {
   webUiPathWrapper = pathWrapper;
   WebUiConfig = new WebUiConfigWrapper();
-  const [host, port, token] = await InitPort(await WebUiConfig.GetWebUIConfig());
+  const config = await WebUiConfig.GetWebUIConfig();
+  if (config.disableWebUI) {
+    logger.log("[NapCat] [WebUi] WebUI is disabled by configuration.");
+    return;
+  }
+  const [host, port, token] = await InitPort(config);
   if (port == 0) {
     logger.log("[NapCat] [WebUi] Current WebUi is not run.");
     return;
@@ -89752,14 +90928,11 @@ async function InitWebUi(logger, pathWrapper) {
   });
   server.listen(port, host, async () => {
     let searchParams = { token };
-    if (host !== "" && host !== "0.0.0.0") {
+    if (host !== "") {
       logger.log(
         `[NapCat] [WebUi] WebUi User Panel Url: ${createUrl(host, port.toString(), "/webui", searchParams)}`
       );
     }
-    logger.log(
-      `[NapCat] [WebUi] WebUi Local Panel Url: ${createUrl("127.0.0.1", port.toString(), "/webui", searchParams)}`
-    );
   });
 }
 async function tryUseHost(host) {
