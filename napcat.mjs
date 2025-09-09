@@ -32720,7 +32720,7 @@ class PacketClientSession {
   }
 }
 
-const napCatVersion = "4.8.106";
+const napCatVersion = "4.8.109";
 
 const typedOffset = offset;
 class NTQQPacketApi {
@@ -62809,7 +62809,7 @@ class GoCQHTTPGetForwardMsgAction extends OneBotAction {
         if (!singleMsg) {
           throw new Error("消息不存在或已过期");
         }
-        const resMsg = (await this.obContext.apis.MsgApi.parseMessageV2(singleMsg))?.arrayMsg;
+        const resMsg = await this.obContext.apis.MsgApi.parseMessage(singleMsg, "array", true);
         const forwardContent = resMsg?.message?.[0]?.data?.content;
         if (forwardContent) {
           return { messages: forwardContent };
@@ -65194,7 +65194,7 @@ function createActionMap(obContext, core) {
 
 const name = "napcat";
 const type = "module";
-const version = "4.8.106";
+const version = "4.8.109";
 const scripts = {"build:universal":"npm run build:webui && vite build --mode universal || exit 1","build:framework":"npm run build:webui && vite build --mode framework || exit 1","build:shell":"npm run build:webui && vite build --mode shell || exit 1","build:webui":"cd napcat.webui && npm run build","dev:universal":"vite build --mode universal","dev:framework":"vite build --mode framework","dev:shell":"vite build --mode shell","dev:shell-analysis":"vite build --mode shell-analysis","dev:webui":"cd napcat.webui && npm run dev","lint":"eslint --fix src/**/*.{js,ts,vue}","depend":"cd dist && npm install --omit=dev","dev:depend":"npm i && cd napcat.webui && npm i"};
 const devDependencies = {"@babel/core":"^7.28.0","@babel/generator":"^7.28.0","@babel/parser":"^7.28.0","@babel/preset-typescript":"^7.24.7","@babel/traverse":"^7.28.0","@babel/types":"^7.28.2","@eslint/compat":"^1.3.1","@eslint/eslintrc":"^3.1.0","@eslint/js":"^9.33.0","@homebridge/node-pty-prebuilt-multiarch":"^0.12.0-beta.5","@log4js-node/log4js-api":"^1.0.2","@napneko/nap-proto-core":"^0.0.4","@rollup/plugin-node-resolve":"^16.0.0","@rollup/plugin-typescript":"^12.1.4","@sinclair/typebox":"^0.34.38","@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/multer":"^1.4.12","@types/node":"^22.0.1","@types/on-finished":"^2.3.4","@types/qrcode-terminal":"^0.12.2","@types/react-color":"^3.0.13","@types/type-is":"^1.6.7","@types/ws":"^8.5.12","@typescript-eslint/eslint-plugin":"^8.3.0","@typescript-eslint/parser":"^8.39.0","ajv":"^8.13.0","async-mutex":"^0.5.0","commander":"^13.0.0","compressing":"^1.10.1","cors":"^2.8.5","esbuild":"0.25.8","eslint":"^9.14.0","eslint-import-resolver-typescript":"^4.4.4","eslint-plugin-import":"^2.32.0","express-rate-limit":"^7.5.0","fast-xml-parser":"^4.3.6","file-type":"^21.0.0","globals":"^16.0.0","json5":"^2.2.3","multer":"^2.0.1","napcat.protobuf":"^1.1.4","typescript":"^5.3.3","typescript-eslint":"^8.35.1","vite":"^7.1.1","vite-plugin-cp":"^6.0.0","vite-tsconfig-paths":"^5.1.0","winston":"^3.17.0"};
 const dependencies = {"express":"^5.0.0","silk-wasm":"^3.6.1","ws":"^8.18.3"};
@@ -65378,6 +65378,12 @@ const LoginRuntime = {
     nick: ""
   },
   QQVersion: "unknown",
+  onQQLoginStatusChange: async (status) => {
+    LoginRuntime.QQLoginStatus = status;
+  },
+  onWebUiTokenChange: async (_token) => {
+    return;
+  },
   NapCatHelper: {
     onOB11ConfigChanged: async () => {
       return;
@@ -65394,6 +65400,12 @@ const LoginRuntime = {
   }
 };
 const WebUiDataRuntime = {
+  setWebUiTokenChangeCallback(func) {
+    LoginRuntime.onWebUiTokenChange = func;
+  },
+  getWebUiTokenChangeCallback() {
+    return LoginRuntime.onWebUiTokenChange;
+  },
   checkLoginRate(ip, RateLimit) {
     const key = `login_rate:${ip}`;
     const count = store.get(key) || 0;
@@ -65409,6 +65421,12 @@ const WebUiDataRuntime = {
   },
   getQQLoginStatus() {
     return LoginRuntime.QQLoginStatus;
+  },
+  setQQLoginCallback(func) {
+    LoginRuntime.onQQLoginStatusChange = func;
+  },
+  getQQLoginCallback() {
+    return LoginRuntime.onQQLoginStatusChange;
   },
   setQQLoginStatus(status) {
     LoginRuntime.QQLoginStatus = status;
@@ -65971,6 +65989,7 @@ class NapCatOneBot11Adapter {
     this.core.apis.UserApi.getUserDetailInfo(selfInfo.uid, false).then((user) => {
       selfInfo.nick = user.nick;
       this.context.logger.setLogSelfInfo(selfInfo);
+      WebUiDataRuntime.getQQLoginCallback()(true);
     }).catch((e) => this.context.logger.logError(e));
     const serviceInfo = await this.creatOneBotLog(ob11Config);
     this.context.logger.log(`[Notice] [OneBot11] ${serviceInfo}`);
@@ -66034,6 +66053,24 @@ class NapCatOneBot11Adapter {
     WebUiDataRuntime.setQQVersion(this.core.context.basicInfoWrapper.getFullQQVersion());
     WebUiDataRuntime.setQQLoginInfo(selfInfo);
     WebUiDataRuntime.setQQLoginStatus(true);
+    let sendWebUiToken = async (token) => {
+      await this.core.apis.MsgApi.sendMsg(
+        { chatType: ChatType.KCHATTYPEC2C, peerUid: selfInfo.uid, guildId: "" },
+        [{
+          elementType: ElementType.TEXT,
+          elementId: "",
+          textElement: {
+            content: "Update WebUi Token: " + token,
+            atType: NTMsgAtType.ATTYPEUNKNOWN,
+            atUid: "",
+            atTinyId: "",
+            atNtUid: ""
+          }
+        }],
+        5e3
+      );
+    };
+    WebUiDataRuntime.setWebUiTokenChangeCallback(sendWebUiToken);
     WebUiDataRuntime.setOnOB11ConfigChanged(async (newConfig) => {
       const prev = this.configLoader.configData;
       this.configLoader.save(newConfig);
@@ -66693,8 +66730,7 @@ const themeType = Type.Object(
 const WebUiConfigSchema = Type.Object({
   host: Type.String({ default: "0.0.0.0" }),
   port: Type.Number({ default: 6099 }),
-  // napcat+<月份日时>，例如 napcat062511
-  token: Type.String({ default: "napcat" + ((/* @__PURE__ */ new Date()).getMonth() + 1).toString().padStart(2, "0") + (/* @__PURE__ */ new Date()).getDate().toString().padStart(2, "0") + (/* @__PURE__ */ new Date()).getHours().toString().padStart(2, "0") }),
+  token: Type.String({ default: "napcat" }),
   loginRate: Type.Number({ default: 10 }),
   autoLoginAccount: Type.String({ default: "" }),
   theme: themeType,
@@ -90876,6 +90912,18 @@ async function InitWebUi(logger, pathWrapper) {
       }
     }
   );
+  WebUiDataRuntime.setQQLoginCallback(async (_status) => {
+    try {
+      if ((await WebUiConfig.GetWebUIConfig()).defaultToken) {
+        let randomToken = Math.random().toString(36).slice(-8);
+        await WebUiConfig.UpdateWebUIConfig({ token: randomToken });
+        console.log(`[NapCat] [WebUi] Update WebUi Token: ${randomToken}`);
+        await WebUiDataRuntime.getWebUiTokenChangeCallback()(randomToken);
+      }
+    } catch (error) {
+      console.log(`[NapCat] [WebUi] Update WebUi Token failed.` + error);
+    }
+  });
   app.use(express.json());
   app.use(cors);
   app.use("/webui/fonts/AaCute.woff", async (_req, res, next) => {
@@ -90928,6 +90976,9 @@ async function InitWebUi(logger, pathWrapper) {
   });
   server.listen(port, host, async () => {
     let searchParams = { token };
+    logger.log(
+      `[NapCat] [WebUi] WebUi User Panel Url: ${createUrl("127.0.0.1", port.toString(), "/webui", searchParams)}`
+    );
     if (host !== "") {
       logger.log(
         `[NapCat] [WebUi] WebUi User Panel Url: ${createUrl(host, port.toString(), "/webui", searchParams)}`
